@@ -30,7 +30,8 @@ export function createApp() {
   app.use(
     cors({
       origin(origin, callback) {
-        if (!origin || allowedOrigins.has(origin)) return callback(null, true);
+        const isVercelApp = /^https:\/\/[a-z0-9-]+\.vercel\.app$/i.test(origin || "");
+        if (!origin || allowedOrigins.has(origin) || isVercelApp) return callback(null, true);
         return callback(new Error("Not allowed by CORS"));
       }
     })

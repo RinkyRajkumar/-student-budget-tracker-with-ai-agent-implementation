@@ -9,3 +9,5 @@ server/.env
 *.log
 .edge-profile*/
 edge-dom.html
+
+.vercel

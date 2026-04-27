@@ -1,7 +1,7 @@
 import axios from "axios";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:4000/api";
-const useBrowserStore = import.meta.env.PROD && !import.meta.env.VITE_API_URL;
+const API_URL = import.meta.env.VITE_API_URL || (import.meta.env.PROD ? "/api" : "http://localhost:4000/api");
+const useBrowserStore = import.meta.env.VITE_USE_BROWSER_STORE === "true";
 
 const remoteApi = axios.create({ baseURL: API_URL });
 
