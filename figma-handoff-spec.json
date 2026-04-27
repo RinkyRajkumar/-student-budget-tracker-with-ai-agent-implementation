@@ -1,0 +1,60 @@
+{
+  "figma": {
+    "fileName": "Student Budget Tracker Premium Redesign",
+    "fileKey": "KXfMlSRsR3TJHG6K7mGAmk",
+    "url": "https://www.figma.com/design/KXfMlSRsR3TJHG6K7mGAmk",
+    "pages": [
+      "00 Design System",
+      "01 Responsive Screens",
+      "02 Developer Specs"
+    ]
+  },
+  "designSystem": {
+    "modes": ["Light", "Dark"],
+    "grid": "8px spacing system with 4px sub-steps for fine control",
+    "typography": {
+      "fontFamily": "Inter, SF Pro Text, Segoe UI, Roboto, Arial, sans-serif",
+      "styles": {
+        "display": { "fontSize": 40, "lineHeight": 48, "fontWeight": 700 },
+        "h1": { "fontSize": 32, "lineHeight": 40, "fontWeight": 700 },
+        "h2": { "fontSize": 24, "lineHeight": 32, "fontWeight": 700 },
+        "title": { "fontSize": 18, "lineHeight": 26, "fontWeight": 650 },
+        "body": { "fontSize": 14, "lineHeight": 22, "fontWeight": 400 },
+        "label": { "fontSize": 13, "lineHeight": 18, "fontWeight": 600 },
+        "amountLarge": { "fontSize": 36, "lineHeight": 44, "fontWeight": 750 }
+      }
+    },
+    "components": [
+      "Button variants: primary, secondary, ghost, danger",
+      "Input default state with label/value structure",
+      "Transaction Row expense variant",
+      "Metric Card for KPI summaries",
+      "Category Chip",
+      "Desktop Sidebar Navigation",
+      "Mobile bottom-tab layout direction",
+      "Chart cards: bar trend and donut breakdown"
+    ]
+  },
+  "screens": {
+    "desktop": [
+      "Dashboard",
+      "Daily Expense Tracker",
+      "Calendar View",
+      "Analytics"
+    ],
+    "mobile": [
+      "Dashboard",
+      "Daily Expense Tracker",
+      "Calendar",
+      "Analytics"
+    ]
+  },
+  "interactionSpecs": {
+    "button": "120ms ease-out color/border/transform transition; hover raises by 1px; minimum tap target 44px.",
+    "card": "20px radius, 24px padding, subtle border, optional glass blur, card elevation.",
+    "expenseEntry": "Desktop modal pattern; mobile bottom sheet pattern.",
+    "charts": "Tooltips on hover/tap; legends use labels plus color dots.",
+    "calendar": "Selected day updates inspector on desktop; agenda list on mobile.",
+    "accessibility": "Do not rely only on color for status; use labels such as healthy, watch, over."
+  }
+}
