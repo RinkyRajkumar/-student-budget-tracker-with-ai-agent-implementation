@@ -1,7 +1,11 @@
 import axios from "axios";
+import { defaultCategories as categories, readLocalDatabase, writeLocalDatabase } from "./localDatabase.js";
+import { supabaseApi } from "./supabaseApi.js";
+import { isSupabaseConfigured } from "./supabaseClient.js";
 
 const API_URL = import.meta.env.VITE_API_URL || (import.meta.env.PROD ? "/api" : "http://localhost:4000/api");
-const useBrowserStore = import.meta.env.VITE_USE_BROWSER_STORE === "true";
+const dataBackend = (import.meta.env.VITE_DATA_BACKEND || (isSupabaseConfigured() ? "supabase" : import.meta.env.VITE_USE_BROWSER_STORE === "false" ? "api" : "local")).toLowerCase();
+const useBrowserStore = dataBackend === "local";
 
 const remoteApi = axios.create({ baseURL: API_URL });
 
@@ -16,54 +20,6 @@ const month = () => today().slice(0, 7);
 const cents = (amount) => Math.round(Number(amount || 0) * 100);
 const money = (value) => Number((Number(value || 0) / 100).toFixed(2));
 const nextId = (rows) => Math.max(0, ...rows.map((row) => Number(row.id) || 0)) + 1;
-
-const categories = [
-  { id: 2, name: "Books", color: "#6366f1" },
-  { id: 5, name: "Entertainment", color: "#d946ef" },
-  { id: 10, name: "Food", color: "#f97316" },
-  { id: 6, name: "Health", color: "#ef4444" },
-  { id: 9, name: "Other", color: "#475569" },
-  { id: 3, name: "Rent", color: "#14b8a6" },
-  { id: 7, name: "Shopping", color: "#f59e0b" },
-  { id: 8, name: "Subscriptions", color: "#8b5cf6" },
-  { id: 1, name: "Transport", color: "#0ea5e9" },
-  { id: 4, name: "Tuition", color: "#64748b" }
-];
-
-function seed() {
-  const current = month();
-  return {
-    user: { id: 1, name: "Demo Student", email: "demo@student.edu", currency: "INR" },
-    expenses: [
-      expense(1, 9, 2000, `${current}-25`, "video games", "upi"),
-      expense(2, 10, 30, `${current}-25`, "dal chawal", "upi"),
-      expense(3, 10, 1000, `${current}-24`, "BURGERS", "card"),
-      expense(4, 8, 199, `${current}-15`, "Netflix shared plan subscription", "upi"),
-      expense(5, 8, 59, `${current}-05`, "Spotify Student subscription", "card")
-    ],
-    budget: { monthlyLimit: 50000 },
-    goal: { name: "Spring break fund", targetAmount: 10000, currentAmount: 275, targetDate: "" },
-    subscriptions: [
-      { id: 1, name: "Spotify Student", categoryId: 8, category: "Subscriptions", categoryColor: "#8b5cf6", amount: 59, billingDay: 5, intervalMonths: 1, paymentMethod: "card", active: true, lastChargedMonth: current },
-      { id: 2, name: "Netflix shared plan", categoryId: 8, category: "Subscriptions", categoryColor: "#8b5cf6", amount: 199, billingDay: 15, intervalMonths: 1, paymentMethod: "upi", active: true, lastChargedMonth: current }
-    ],
-    split: {
-      groups: [
-        {
-          id: 1,
-          name: "Canteen Crew",
-          members: [
-            { id: 1, groupId: 1, name: "You", isSelf: true, initials: "Y" },
-            { id: 2, groupId: 1, name: "Rahul", isSelf: false, initials: "R" },
-            { id: 3, groupId: 1, name: "Aisha", isSelf: false, initials: "A" }
-          ]
-        }
-      ],
-      bills: [],
-      settlements: []
-    }
-  };
-}
 
 function expense(id, categoryId, amount, date, note, paymentMethod) {
   const category = categories.find((item) => item.id === categoryId) || categories[0];
@@ -82,16 +38,11 @@ function expense(id, categoryId, amount, date, note, paymentMethod) {
 }
 
 function store() {
-  const raw = localStorage.getItem("student-budget-browser-store");
-  if (raw) return JSON.parse(raw);
-  const initial = seed();
-  localStorage.setItem("student-budget-browser-store", JSON.stringify(initial));
-  return initial;
+  return readLocalDatabase();
 }
 
 function write(next) {
-  localStorage.setItem("student-budget-browser-store", JSON.stringify(next));
-  return next;
+  return writeLocalDatabase(next);
 }
 
 function response(data) {
@@ -308,6 +259,26 @@ const browserApi = {
       write(state);
       return response({ goal: state.goal });
     }
+    const subscriptionMatch = path.match(/^\/subscriptions\/(\d+)$/);
+    if (subscriptionMatch) {
+      const index = state.subscriptions.findIndex((item) => item.id === Number(subscriptionMatch[1]));
+      if (index < 0) return Promise.reject(new Error("Subscription not found."));
+      const category = categories.find((item) => item.id === Number(payload.categoryId)) || categories.find((item) => item.name === "Subscriptions");
+      state.subscriptions[index] = {
+        ...state.subscriptions[index],
+        name: payload.name,
+        categoryId: category.id,
+        category: category.name,
+        categoryColor: category.color,
+        amount: Number(payload.amount),
+        billingDay: Number(payload.billingDay),
+        intervalMonths: Number(payload.intervalMonths),
+        paymentMethod: payload.paymentMethod,
+        active: Boolean(payload.active ?? true)
+      };
+      write(state);
+      return response({ subscription: state.subscriptions[index] });
+    }
     return Promise.reject(new Error(`Unsupported local API route: ${path}`));
   },
   delete(path) {
@@ -326,7 +297,7 @@ const browserApi = {
   }
 };
 
-export const api = useBrowserStore ? browserApi : remoteApi;
+export const api = dataBackend === "supabase" ? supabaseApi : useBrowserStore ? browserApi : remoteApi;
 
 export function saveSession(payload) {
   localStorage.setItem("student-budget-token", payload.token);
@@ -354,7 +325,7 @@ export async function downloadCsv(filters) {
   Object.entries(filters).forEach(([key, value]) => {
     if (value) params.set(key, value);
   });
-  const response = useBrowserStore
+  const response = useBrowserStore || dataBackend === "supabase"
     ? await api.get("/export.csv", { params: filters })
     : await api.get(`/export.csv?${params.toString()}`, { responseType: "blob" });
   const url = URL.createObjectURL(response.data);

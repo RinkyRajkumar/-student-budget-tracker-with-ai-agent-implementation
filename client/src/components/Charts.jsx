@@ -27,7 +27,9 @@ export function CategoryChart({ data }) {
               </Pie>
               <Tooltip
                 formatter={(value) => formatCurrency(value)}
-                contentStyle={{ background: "#0f172a", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 8, color: "#f8fafc" }}
+                contentStyle={{ background: "#0f172a", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 12, color: "#f8fafc" }}
+                labelStyle={{ color: "#f8fafc" }}
+                itemStyle={{ color: "#f8fafc" }}
               />
             </PieChart>
           </ResponsiveContainer>
@@ -62,7 +64,9 @@ export function TrendChart({ data }) {
             <YAxis tick={{ fontSize: 11, fill: "#cbd5e1" }} width={42} />
             <Tooltip
               formatter={(value) => formatCurrency(value)}
-              contentStyle={{ background: "#0f172a", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 8, color: "#f8fafc" }}
+              contentStyle={{ background: "#0f172a", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 12, color: "#f8fafc" }}
+              labelStyle={{ color: "#f8fafc" }}
+              itemStyle={{ color: "#f8fafc" }}
             />
             <Area type="monotone" dataKey="total" stroke="#a78bfa" fill="rgba(124,58,237,0.28)" strokeWidth={2} />
           </AreaChart>

@@ -102,9 +102,13 @@ export default function SubscriptionsPanel({ categories, subscriptions, onCreate
                 </p>
               </div>
               <span className="text-sm font-bold tabular-nums text-slate-100">{formatCurrency(item.amount)}</span>
-              <button className="btn-danger px-2" onClick={() => onDelete(item.id)} aria-label={`Delete ${item.name}`}>
-                <Trash2 size={15} />
-              </button>
+              {item.readOnly ? (
+                <span className="rounded-lg bg-violet-500/15 px-2 py-1 text-xs font-semibold text-violet-200">Setup</span>
+              ) : (
+                <button className="btn-danger px-2" onClick={() => onDelete(item.id)} aria-label={`Delete ${item.name}`}>
+                  <Trash2 size={15} />
+                </button>
+              )}
             </div>
           ))
         )}

@@ -6,8 +6,8 @@ export default function AuthCard({ onAuthed }) {
   const [mode, setMode] = useState("login");
   const [form, setForm] = useState({
     name: "",
-    email: "demo@student.edu",
-    password: "Student123!",
+    email: "",
+    password: "",
     currency: "INR"
   });
   const [error, setError] = useState("");

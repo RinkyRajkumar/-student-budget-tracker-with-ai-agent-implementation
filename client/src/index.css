@@ -22,19 +22,50 @@ textarea {
 }
 
 .card {
-  @apply rounded-lg border border-white/10 bg-slate-950/80 shadow-soft backdrop-blur;
+  border-radius: 24px;
+  background: rgba(10, 12, 28, 0.85);
+  border: 1px solid rgba(167, 139, 250, 0.15);
+  box-shadow: 0 18px 45px rgba(0, 0, 0, 0.28);
+  overflow: hidden;
+  backdrop-filter: blur(16px);
+  transition: all 0.25s ease;
+}
+
+.card:hover,
+.dashboard-card:hover {
+  border-color: rgba(167, 139, 250, 0.35);
+  box-shadow: 0 22px 55px rgba(139, 92, 246, 0.12);
+  transform: translateY(-1px);
+}
+
+.card.card-static:hover {
+  transform: none;
+}
+
+.dashboard-card,
+.panel,
+.widget {
+  border-radius: 24px;
+  background: rgba(10, 12, 28, 0.85);
+  border: 1px solid rgba(167, 139, 250, 0.15);
+  box-shadow: 0 18px 45px rgba(0, 0, 0, 0.28);
+  overflow: hidden;
+  transition: all 0.25s ease;
 }
 
 .input {
-  @apply w-full rounded-lg border border-white/10 bg-slate-900/80 px-3 py-2 text-sm text-slate-100 outline-none transition placeholder:text-slate-500 focus:border-violet-400 focus:ring-2 focus:ring-violet-400/20;
+  @apply w-full border border-white/10 bg-slate-900/80 px-3 py-2 text-sm text-slate-100 outline-none transition placeholder:text-slate-500 focus:border-violet-400 focus:ring-2 focus:ring-violet-400/20;
+  border-radius: 14px;
 }
 
 .btn {
-  @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-60;
+  @apply inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-60;
+  border-radius: 14px;
 }
 
 .btn-primary {
   @apply btn bg-violet-500 text-white hover:bg-violet-400;
+  border-radius: 16px;
 }
 
 .btn-soft {
@@ -43,4 +74,258 @@ textarea {
 
 .btn-danger {
   @apply btn bg-rose-500/15 text-rose-200 hover:bg-rose-500/25;
+}
+
+.recharts-default-tooltip {
+  background: #0f172a !important;
+  border: 1px solid rgba(167, 139, 250, 0.25) !important;
+  border-radius: 12px !important;
+  color: #f8fafc !important;
+  box-shadow: 0 18px 45px rgba(0, 0, 0, 0.32) !important;
+}
+
+.recharts-tooltip-label,
+.recharts-tooltip-item,
+.recharts-tooltip-item-name,
+.recharts-tooltip-item-value,
+.recharts-tooltip-item-separator {
+  color: #f8fafc !important;
+}
+
+input,
+select,
+button,
+textarea {
+  border-radius: 14px;
+}
+
+@keyframes slideInNext {
+  from {
+    opacity: 0;
+    transform: translateX(18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes slideInBack {
+  from {
+    opacity: 0;
+    transform: translateX(-18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.animate-slideInNext {
+  animation: slideInNext 240ms ease-out;
+}
+
+.animate-slideInBack {
+  animation: slideInBack 240ms ease-out;
+}
+
+@keyframes calendarSlideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+    clip-path: inset(0 0 100% 0 round 0 0 20px 20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+    clip-path: inset(0 0 0 0 round 0 0 20px 20px);
+  }
+}
+
+@keyframes calendarControlIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-calendarSlideDown {
+  animation: calendarSlideDown 520ms cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: opacity, transform, clip-path;
+}
+
+.animate-calendarControlIn {
+  opacity: 0;
+  animation: calendarControlIn 320ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.spendly-loader-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at center, rgba(139, 92, 246, 0.25), transparent 45%),
+    radial-gradient(circle at 18% 82%, rgba(76, 29, 149, 0.22), transparent 28rem),
+    linear-gradient(135deg, #050614, #0b0618, #160b2e);
+  backdrop-filter: blur(16px);
+  pointer-events: auto;
+  animation: spendlyLoaderFade 240ms ease-out;
+}
+
+.spendly-loader-card {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  width: min(90vw, 32rem);
+  justify-items: center;
+  padding: 2.5rem 1.5rem;
+  text-align: center;
+}
+
+.spendly-loader-logo {
+  width: min(260px, 72vw);
+  filter: drop-shadow(0 0 32px rgba(139, 92, 246, 0.65));
+  animation: spendlyLogoFloat 2s ease-in-out infinite, spendlyLogoPulse 1.5s ease-in-out infinite;
+}
+
+.spendly-loader-logo > div {
+  justify-content: center;
+}
+
+.spendly-loader-logo svg {
+  height: clamp(4.5rem, 14vw, 5rem);
+}
+
+.spendly-loader-logo span {
+  font-size: clamp(2.4rem, 10vw, 3.25rem);
+}
+
+.spendly-loader-text {
+  margin-top: 1.75rem;
+  color: #dbeafe;
+  font-size: 0.98rem;
+  font-weight: 800;
+}
+
+.spendly-loader-progress {
+  position: relative;
+  margin-top: 1rem;
+  height: 4px;
+  width: min(17rem, 72vw);
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.spendly-loader-progress::after {
+  content: "";
+  display: block;
+  height: 100%;
+  width: 45%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #8b5cf6, #c084fc, #22d3ee);
+  animation: spendlyProgress 1s ease-in-out infinite;
+}
+
+.spendly-loader-orb {
+  position: absolute;
+  width: 18rem;
+  height: 18rem;
+  border-radius: 999px;
+  opacity: 0.28;
+  filter: blur(48px);
+  animation: spendlyOrbDrift 7s ease-in-out infinite alternate;
+}
+
+.spendly-loader-orb-one {
+  left: 12%;
+  top: 16%;
+  background: rgba(139, 92, 246, 0.58);
+}
+
+.spendly-loader-orb-two {
+  right: 12%;
+  bottom: 12%;
+  background: rgba(76, 29, 149, 0.72);
+  animation-delay: 900ms;
+}
+
+@keyframes spendlyLoaderFade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes spendlyLogoFloat {
+  0%, 100% {
+    transform: translateY(0) scale(1);
+  }
+  50% {
+    transform: translateY(-8px) scale(1.018);
+  }
+}
+
+@keyframes spendlyLogoPulse {
+  0%, 100% {
+    filter: drop-shadow(0 0 24px rgba(139, 92, 246, 0.46));
+  }
+  50% {
+    filter: drop-shadow(0 0 38px rgba(192, 132, 252, 0.68));
+  }
+}
+
+@keyframes spendlyProgress {
+  0% {
+    transform: translateX(-115%);
+  }
+  100% {
+    transform: translateX(255%);
+  }
+}
+
+@keyframes spendlyOrbDrift {
+  from {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  to {
+    transform: translate3d(1.4rem, -1rem, 0) scale(1.08);
+  }
+}
+
+@media (max-width: 640px) {
+  .spendly-loader-logo {
+    width: min(190px, 76vw);
+  }
+
+  .spendly-loader-logo svg {
+    height: 4rem;
+  }
+
+  .spendly-loader-logo span {
+    font-size: 2.35rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spendly-loader-overlay,
+  .spendly-loader-logo,
+  .spendly-loader-progress::after,
+  .spendly-loader-orb {
+    animation-duration: 1ms;
+    animation-iteration-count: 1;
+  }
 }

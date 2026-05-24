@@ -128,11 +128,7 @@ function seedDatabase(db) {
 
   db.prepare("UPDATE users SET currency = 'INR' WHERE currency = 'USD'").run();
   const user = db.prepare("SELECT id FROM users WHERE email = ?").get("demo@student.edu");
-  if (user) {
-    seedDefaultSubscriptions(db, user.id);
-    seedDefaultSplitGroup(db, user.id);
-    return;
-  }
+  if (user) return;
 
   const passwordHash = bcrypt.hashSync("Student123!", 10);
   const result = db
@@ -140,79 +136,8 @@ function seedDatabase(db) {
     .run("Demo Student", "demo@student.edu", passwordHash, "INR");
   const userId = result.lastInsertRowid;
 
-  db.prepare("INSERT INTO budgets (user_id, monthly_limit_cents) VALUES (?, ?)").run(userId, 95000);
+  db.prepare("INSERT INTO budgets (user_id, monthly_limit_cents) VALUES (?, ?)").run(userId, 0);
   db.prepare(
     "INSERT INTO savings_goals (user_id, name, target_cents, current_cents, target_date) VALUES (?, ?, ?, ?, ?)"
-  ).run(userId, "Spring break fund", 80000, 27500, monthOffsetDate(3));
-
-  const catId = (name) => db.prepare("SELECT id FROM categories WHERE name = ?").get(name).id;
-  const now = new Date();
-  const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-  const demoExpenses = [
-    [catId("Rent"), 42000, `${currentMonth}-01`, "Shared room rent", "bank"],
-    [catId("Food"), 1250, isoDateOffset(0), "Campus lunch", "card"],
-    [catId("Food"), 860, isoDateOffset(-1), "Coffee and snacks", "upi"],
-    [catId("Books"), 4899, isoDateOffset(-3), "Used textbook", "card"],
-    [catId("Transport"), 1800, isoDateOffset(-5), "Metro pass recharge", "upi"],
-    [catId("Entertainment"), 2200, isoDateOffset(-7), "Movie night", "card"],
-    [catId("Subscriptions"), 999, isoDateOffset(-9), "Study app monthly plan", "card"],
-    [catId("Health"), 1350, isoDateOffset(-12), "Pharmacy", "cash"],
-    [catId("Shopping"), 3150, isoDateOffset(-14), "Dorm supplies", "card"]
-  ];
-
-  const insertExpense = db.prepare(
-    "INSERT INTO expenses (user_id, category_id, amount_cents, spent_at, note, payment_method) VALUES (?, ?, ?, ?, ?, ?)"
-  );
-  const seedExpenses = db.transaction(() => {
-    demoExpenses.forEach(([categoryId, amount, date, note, method]) => {
-      insertExpense.run(userId, categoryId, amount, date, note, method);
-    });
-  });
-  seedExpenses();
-
-  seedDefaultSubscriptions(db, userId);
-  seedDefaultSplitGroup(db, userId);
-}
-
-function seedDefaultSubscriptions(db, userId) {
-  const existing = db.prepare("SELECT id FROM subscriptions WHERE user_id = ? LIMIT 1").get(userId);
-  if (existing) return;
-
-  const catId = (name) => db.prepare("SELECT id FROM categories WHERE name = ?").get(name).id;
-  const insertSubscription = db.prepare(
-    `INSERT INTO subscriptions
-      (user_id, category_id, name, amount_cents, billing_day, interval_months, payment_method, active)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-  );
-  insertSubscription.run(userId, catId("Subscriptions"), "Spotify Student", 5900, 5, 1, "card", 1);
-  insertSubscription.run(userId, catId("Subscriptions"), "Netflix shared plan", 19900, 15, 1, "upi", 1);
-}
-
-function seedDefaultSplitGroup(db, userId) {
-  const existing = db.prepare("SELECT id FROM split_groups WHERE user_id = ? LIMIT 1").get(userId);
-  if (existing) return;
-
-  const group = db.prepare("INSERT INTO split_groups (user_id, name) VALUES (?, ?)").run(userId, "Canteen Crew");
-  const insertMember = db.prepare("INSERT INTO split_group_members (group_id, name, is_self) VALUES (?, ?, ?)");
-  insertMember.run(group.lastInsertRowid, "You", 1);
-  insertMember.run(group.lastInsertRowid, "Rahul", 0);
-  insertMember.run(group.lastInsertRowid, "Aisha", 0);
-}
-
-function isoDateOffset(days) {
-  const date = new Date();
-  date.setDate(date.getDate() + days);
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
-function monthOffsetDate(months) {
-  const date = new Date();
-  date.setMonth(date.getMonth() + months);
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
+  ).run(userId, "", 0, 0, "");
 }

@@ -81,6 +81,32 @@ router.post(
   })
 );
 
+router.put(
+  "/:id",
+  validate(idParam.merge(subscriptionBody)),
+  asyncHandler(async (req, res) => {
+    const { name, amount, categoryId, billingDay, intervalMonths, paymentMethod, active } = req.validated.body;
+    ensureCategory(categoryId);
+    const result = db
+      .prepare(
+        `UPDATE subscriptions
+         SET category_id = ?, name = ?, amount_cents = ?, billing_day = ?, interval_months = ?, payment_method = ?, active = ?, updated_at = CURRENT_TIMESTAMP
+         WHERE id = ? AND user_id = ?`
+      )
+      .run(categoryId, name, toCents(amount), billingDay, intervalMonths, paymentMethod, active ? 1 : 0, req.validated.params.id, req.user.id);
+    if (!result.changes) throw new ApiError(404, "NOT_FOUND", "Subscription not found.");
+
+    const row = db
+      .prepare(
+        `SELECT s.*, c.name AS category, c.color AS category_color
+         FROM subscriptions s JOIN categories c ON c.id = s.category_id
+         WHERE s.id = ? AND s.user_id = ?`
+      )
+      .get(req.validated.params.id, req.user.id);
+    res.json({ subscription: mapSubscription(row) });
+  })
+);
+
 router.delete(
   "/:id",
   validate(idParam),

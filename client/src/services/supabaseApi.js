@@ -1,0 +1,377 @@
+import { defaultCategories } from "./localDatabase.js";
+import { getSupabase } from "./supabaseClient.js";
+
+const SESSION_KEY = "student-budget-app-session";
+
+const today = () => new Date().toISOString().slice(0, 10);
+const month = () => today().slice(0, 7);
+
+function response(data) {
+  return Promise.resolve({ data });
+}
+
+function readSessionUser() {
+  try {
+    return JSON.parse(localStorage.getItem(SESSION_KEY) || "null");
+  } catch {
+    return null;
+  }
+}
+
+async function requireSupabaseUser() {
+  const supabase = getSupabase();
+  const localUser = readSessionUser();
+  const { data, error } = await supabase.auth.getUser();
+  if (error || !data.user) throw new Error("Please login again to sync with Supabase.");
+  const user = {
+    id: data.user.id,
+    name: localUser?.id === data.user.id ? localUser.name : data.user.user_metadata?.name || data.user.email?.split("@")[0] || "Student",
+    email: data.user.email
+  };
+  localStorage.setItem(SESSION_KEY, JSON.stringify(user));
+  return { supabase, user };
+}
+
+function normalizeExpense(row) {
+  return {
+    id: row.id,
+    categoryId: row.category_id,
+    category: row.category_name,
+    categoryColor: row.category_color,
+    amount: Number(row.amount || 0),
+    amountCents: Math.round(Number(row.amount || 0) * 100),
+    date: row.spent_on,
+    note: row.note || "",
+    paymentMethod: row.payment_method,
+    createdAt: row.created_at
+  };
+}
+
+function normalizeSubscription(row) {
+  return {
+    id: row.id,
+    name: row.name,
+    categoryId: row.category_id,
+    category: row.category_name,
+    categoryColor: row.category_color,
+    amount: Number(row.amount || 0),
+    billingDay: Number(row.billing_day || 1),
+    intervalMonths: Number(row.interval_months || 1),
+    paymentMethod: row.payment_method,
+    active: row.active,
+    notes: row.notes || "",
+    lastChargedMonth: row.last_charged_month || ""
+  };
+}
+
+function categoryById(categories, categoryId) {
+  return categories.find((item) => Number(item.id) === Number(categoryId)) || defaultCategories.find((item) => item.name === "Other") || defaultCategories[0];
+}
+
+async function loadCategories(supabase, userId) {
+  const { data, error } = await supabase
+    .from("spendly_categories")
+    .select("*")
+    .eq("user_id", userId)
+    .order("name", { ascending: true });
+  if (error) throw error;
+  const custom = (data || []).map((row) => ({
+    id: row.category_id,
+    name: row.name,
+    color: row.color,
+    icon: row.icon,
+    isCustom: row.is_custom
+  }));
+  const existing = new Set(defaultCategories.map((item) => item.name.toLowerCase()));
+  return [...defaultCategories, ...custom.filter((item) => !existing.has(item.name.toLowerCase()))];
+}
+
+function filterExpenses(rows, params = {}) {
+  return rows
+    .filter((item) => !params.from || item.date >= params.from)
+    .filter((item) => !params.to || item.date <= params.to)
+    .filter((item) => !params.categoryId || String(item.categoryId) === String(params.categoryId))
+    .filter((item) => !params.paymentMethod || item.paymentMethod === params.paymentMethod)
+    .filter((item) => !params.search || item.note.toLowerCase().includes(String(params.search).toLowerCase()))
+    .sort((a, b) => b.date.localeCompare(a.date) || Number(b.id) - Number(a.id));
+}
+
+function monthBounds(value = month()) {
+  const [year, monthNumber] = value.split("-").map(Number);
+  const end = new Date(year, monthNumber, 0).getDate();
+  return { start: `${value}-01`, end: `${value}-${String(end).padStart(2, "0")}`, days: end };
+}
+
+function buildSummary(expenses, budget, categories, selectedMonth = month()) {
+  const bounds = monthBounds(selectedMonth);
+  const monthRows = expenses.filter((item) => item.date >= bounds.start && item.date <= bounds.end);
+  const total = monthRows.reduce((sum, item) => sum + Number(item.amount || 0), 0);
+  const todayRows = expenses.filter((item) => item.date === today());
+  const weekStart = new Date();
+  weekStart.setDate(weekStart.getDate() - 6);
+  const weekStartIso = weekStart.toISOString().slice(0, 10);
+  const categoryRows = categories
+    .map((category) => {
+      const categoryTotal = monthRows.filter((item) => String(item.categoryId) === String(category.id) || item.category === category.name).reduce((sum, item) => sum + Number(item.amount || 0), 0);
+      return { ...category, total: categoryTotal, percent: total ? Math.round((categoryTotal / total) * 10000) / 100 : 0 };
+    })
+    .filter((item) => item.total > 0)
+    .sort((a, b) => b.total - a.total);
+  const trend = Object.values(
+    monthRows.reduce((acc, item) => {
+      if (!acc[item.date]) acc[item.date] = { date: item.date, total: 0 };
+      acc[item.date].total += Number(item.amount || 0);
+      return acc;
+    }, {})
+  ).sort((a, b) => a.date.localeCompare(b.date));
+  const remaining = Math.max(0, Number(budget.monthlyLimit || 0) - total);
+  const daysRemaining = Math.max(1, bounds.days - Number(today().slice(8, 10)) + 1);
+  return {
+    month: selectedMonth,
+    dailyTotal: todayRows.reduce((sum, item) => sum + Number(item.amount || 0), 0),
+    weeklyTotal: expenses.filter((item) => item.date >= weekStartIso).reduce((sum, item) => sum + Number(item.amount || 0), 0),
+    monthlyTotal: total,
+    monthlyBudget: Number(budget.monthlyLimit || 0),
+    remainingBudget: remaining,
+    budgetUsedPercent: budget.monthlyLimit ? Math.round((total / Number(budget.monthlyLimit)) * 10000) / 100 : 0,
+    safeToSpendPerDay: Number((remaining / daysRemaining).toFixed(2)),
+    daysRemaining,
+    budgetStatus: total > budget.monthlyLimit ? "over" : total > budget.monthlyLimit * 0.85 ? "near" : "ok",
+    categories: categoryRows,
+    trend
+  };
+}
+
+function buildAdvice(expenses, budget, categories, selectedMonth = month()) {
+  const summary = buildSummary(expenses, budget, categories, selectedMonth);
+  const highest = summary.categories[0];
+  const notes = expenses.filter((item) => item.date.startsWith(selectedMonth) && item.note);
+  const foodNotes = notes.filter((item) => /food|lunch|dinner|coffee|burger|snack|dal|chawal/i.test(item.note));
+  const noteInsights = foodNotes.length
+    ? [{ topic: "outside_food", label: "Food notes", count: foodNotes.length, amount: foodNotes.reduce((sum, item) => sum + Number(item.amount || 0), 0), message: "Your notes mention bought meals or snacks. Try setting a weekly cafe/order cap." }]
+    : [];
+  return {
+    advice: {
+      summary: highest ? `${highest.name} is your highest spending area this month.` : "No spending recorded for this month yet.",
+      highestCategory: highest ? { category: highest.name, amount: highest.total, percentOfSpend: highest.percent } : null,
+      safeToSpend: { totalRemaining: summary.remainingBudget, perDay: summary.safeToSpendPerDay, daysRemaining: summary.daysRemaining, status: summary.budgetStatus },
+      alerts: [{ level: summary.budgetStatus === "over" ? "critical" : "normal", message: summary.budgetStatus === "over" ? "You have exceeded your monthly budget." : "Your spending is within the expected range." }],
+      suggestions: noteInsights.length ? [noteInsights[0].message, "Review recent purchases and mark which ones were necessary."] : ["Set a small buffer for unplanned expenses."],
+      noteInsights,
+      weeklyTip: noteInsights.length ? "Pick two low-cost meal swaps this week." : "Plan one no-spend day this week."
+    }
+  };
+}
+
+async function loadExpenses(supabase, userId) {
+  const { data, error } = await supabase
+    .from("spendly_expenses")
+    .select("*")
+    .eq("user_id", userId)
+    .order("spent_on", { ascending: false })
+    .order("id", { ascending: false });
+  if (error) throw error;
+  return (data || []).map(normalizeExpense);
+}
+
+async function loadBudget(supabase, userId) {
+  const { data, error } = await supabase
+    .from("spendly_budget_settings")
+    .select("monthly_limit")
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (error) throw error;
+  return { monthlyLimit: Number(data?.monthly_limit || 0) };
+}
+
+async function loadGoal(supabase, userId) {
+  const { data, error } = await supabase
+    .from("spendly_savings_goals")
+    .select("*")
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (error) throw error;
+  const goal = {
+    name: data?.name || "",
+    targetAmount: Number(data?.target_amount || 0),
+    currentAmount: Number(data?.current_amount || 0),
+    targetDate: data?.target_date || ""
+  };
+  return {
+    ...goal,
+    progressPercent: goal.targetAmount ? Math.round((goal.currentAmount / goal.targetAmount) * 10000) / 100 : 0
+  };
+}
+
+async function loadSubscriptions(supabase, userId) {
+  const { data, error } = await supabase
+    .from("spendly_subscriptions")
+    .select("*")
+    .eq("user_id", userId)
+    .order("billing_day", { ascending: true });
+  if (error) throw error;
+  return (data || []).map(normalizeSubscription);
+}
+
+export const supabaseApi = {
+  async get(path, config = {}) {
+    const { supabase, user } = await requireSupabaseUser();
+    const params = config.params || {};
+    if (path === "/auth/local") return response({ user, token: "supabase-session" });
+    if (path === "/categories") return response({ categories: await loadCategories(supabase, user.id) });
+    if (path === "/expenses") return response({ expenses: filterExpenses(await loadExpenses(supabase, user.id), params) });
+    if (path === "/budget") return response(await loadBudget(supabase, user.id));
+    if (path === "/savings-goal") return response({ goal: await loadGoal(supabase, user.id) });
+    if (path === "/subscriptions") return response({ subscriptions: await loadSubscriptions(supabase, user.id) });
+    if (path === "/summary") {
+      const [expenses, budget, categories] = await Promise.all([loadExpenses(supabase, user.id), loadBudget(supabase, user.id), loadCategories(supabase, user.id)]);
+      return response({ summary: buildSummary(expenses, budget, categories, params.month || month()) });
+    }
+    if (path === "/advice") {
+      const [expenses, budget, categories] = await Promise.all([loadExpenses(supabase, user.id), loadBudget(supabase, user.id), loadCategories(supabase, user.id)]);
+      return response(buildAdvice(expenses, budget, categories, params.month || month()));
+    }
+    if (path.startsWith("/export.csv")) {
+      const rows = filterExpenses(await loadExpenses(supabase, user.id), params);
+      const csv = ["date,category,note,payment_method,amount", ...rows.map((item) => [item.date, item.category, `"${item.note.replaceAll('"', '""')}"`, item.paymentMethod, item.amount].join(","))].join("\n");
+      return response(new Blob([csv], { type: "text/csv" }));
+    }
+    throw new Error(`Unsupported Supabase API route: ${path}`);
+  },
+  async post(path, payload) {
+    const { supabase, user } = await requireSupabaseUser();
+    const categories = await loadCategories(supabase, user.id);
+    if (path === "/expenses") {
+      const category = categoryById(categories, payload.categoryId);
+      const { data, error } = await supabase
+        .from("spendly_expenses")
+        .insert({
+          user_id: user.id,
+          category_id: category.id,
+          category_name: category.name,
+          category_color: category.color,
+          amount: Number(payload.amount || 0),
+          spent_on: payload.date,
+          note: payload.note || "",
+          payment_method: payload.paymentMethod || "other"
+        })
+        .select()
+        .single();
+      if (error) throw error;
+      return response({ expense: normalizeExpense(data) });
+    }
+    if (path === "/subscriptions") {
+      const category = categoryById(categories, payload.categoryId);
+      const { data, error } = await supabase
+        .from("spendly_subscriptions")
+        .insert({
+          user_id: user.id,
+          name: payload.name,
+          amount: Number(payload.amount || 0),
+          category_id: category.id,
+          category_name: category.name,
+          category_color: category.color,
+          billing_day: Number(payload.billingDay || 1),
+          interval_months: Number(payload.intervalMonths || 1),
+          payment_method: payload.paymentMethod || "other",
+          active: Boolean(payload.active ?? true)
+        })
+        .select()
+        .single();
+      if (error) throw error;
+      return response({ subscription: normalizeSubscription(data) });
+    }
+    throw new Error(`Unsupported Supabase API route: ${path}`);
+  },
+  async put(path, payload) {
+    const { supabase, user } = await requireSupabaseUser();
+    const categories = await loadCategories(supabase, user.id);
+    const expenseMatch = path.match(/^\/expenses\/(\d+)$/);
+    const subscriptionMatch = path.match(/^\/subscriptions\/(\d+)$/);
+    if (expenseMatch) {
+      const category = categoryById(categories, payload.categoryId);
+      const { data, error } = await supabase
+        .from("spendly_expenses")
+        .update({
+          category_id: category.id,
+          category_name: category.name,
+          category_color: category.color,
+          amount: Number(payload.amount || 0),
+          spent_on: payload.date,
+          note: payload.note || "",
+          payment_method: payload.paymentMethod || "other"
+        })
+        .eq("user_id", user.id)
+        .eq("id", Number(expenseMatch[1]))
+        .select()
+        .single();
+      if (error) throw error;
+      return response({ expense: normalizeExpense(data) });
+    }
+    if (path === "/budget") {
+      const { data, error } = await supabase
+        .from("spendly_budget_settings")
+        .upsert({ user_id: user.id, monthly_limit: Number(payload.monthlyLimit || 0), updated_at: new Date().toISOString() }, { onConflict: "user_id" })
+        .select("monthly_limit")
+        .single();
+      if (error) throw error;
+      return response({ monthlyLimit: Number(data?.monthly_limit || 0) });
+    }
+    if (path === "/savings-goal") {
+      const { data, error } = await supabase
+        .from("spendly_savings_goals")
+        .upsert({
+          user_id: user.id,
+          name: payload.name || "",
+          target_amount: Number(payload.targetAmount || 0),
+          current_amount: Number(payload.currentAmount || 0),
+          target_date: payload.targetDate || null,
+          updated_at: new Date().toISOString()
+        }, { onConflict: "user_id" })
+        .select()
+        .single();
+      if (error) throw error;
+      const goal = await loadGoal(supabase, data.user_id);
+      return response({ goal });
+    }
+    if (subscriptionMatch) {
+      const category = categoryById(categories, payload.categoryId);
+      const { data, error } = await supabase
+        .from("spendly_subscriptions")
+        .update({
+          name: payload.name,
+          amount: Number(payload.amount || 0),
+          category_id: category.id,
+          category_name: category.name,
+          category_color: category.color,
+          billing_day: Number(payload.billingDay || 1),
+          interval_months: Number(payload.intervalMonths || 1),
+          payment_method: payload.paymentMethod || "other",
+          active: Boolean(payload.active ?? true)
+        })
+        .eq("user_id", user.id)
+        .eq("id", Number(subscriptionMatch[1]))
+        .select()
+        .single();
+      if (error) throw error;
+      return response({ subscription: normalizeSubscription(data) });
+    }
+    throw new Error(`Unsupported Supabase API route: ${path}`);
+  },
+  async delete(path) {
+    const { supabase, user } = await requireSupabaseUser();
+    const expenseMatch = path.match(/^\/expenses\/(\d+)$/);
+    const subscriptionMatch = path.match(/^\/subscriptions\/(\d+)$/);
+    if (expenseMatch) {
+      const { error } = await supabase.from("spendly_expenses").delete().eq("user_id", user.id).eq("id", Number(expenseMatch[1]));
+      if (error) throw error;
+      return response({});
+    }
+    if (subscriptionMatch) {
+      const { error } = await supabase.from("spendly_subscriptions").delete().eq("user_id", user.id).eq("id", Number(subscriptionMatch[1]));
+      if (error) throw error;
+      return response({});
+    }
+    throw new Error(`Unsupported Supabase API route: ${path}`);
+  }
+};

@@ -1,11 +1,11 @@
 # Spendly - Budget Tracker
 
-A functional student budget tracking website built with React, Vite, Tailwind CSS, Express, SQLite, and Recharts.
+A functional student budget tracking website built with React, Vite, Tailwind CSS, Supabase-ready persistence, a browser-local fallback database, optional Express/sql.js APIs, and Recharts.
 
 ## Features
 
 - Student signup and login with JWT authentication
-- Add, edit, delete, search, and filter expenses
+- Add spending from the dashboard and analyze it in Spending
 - Daily, weekly, and monthly summaries
 - Category-wise spending charts and monthly trend chart
 - Monthly budget limit with near/over-budget alerts
@@ -13,13 +13,8 @@ A functional student budget tracking website built with React, Vite, Tailwind CS
 - Smart advice with highest category, cut-cost suggestions, safe-to-spend amount, and weekly tips
 - CSV export for filtered expenses
 - Split Bills receipt OCR through Google Gemini
-- Seeded demo account and data
+- Vercel-ready Supabase database support with a local browser fallback
 - Mobile-first dashboard UI
-
-## Demo Login
-
-- Email: `demo@student.edu`
-- Password: `Student123!`
 
 ## Setup
 
@@ -33,9 +28,21 @@ A functional student budget tracking website built with React, Vite, Tailwind CS
 
    ```bash
    copy .env.example server\.env
+   copy client\.env.example client\.env
    ```
 
-   On macOS/Linux use `cp .env.example server/.env`.
+   On macOS/Linux use `cp .env.example server/.env` and `cp client/.env.example client/.env`.
+
+   The frontend uses the browser-local database by default. To use Supabase, create a Supabase project, run [supabase/schema.sql](./supabase/schema.sql) in the Supabase SQL editor, then set:
+
+   ```bash
+   # client/.env
+   VITE_DATA_BACKEND=supabase
+   VITE_SUPABASE_URL=https://your-project.supabase.co
+   VITE_SUPABASE_ANON_KEY=your-supabase-anon-key
+   ```
+
+   Keep `VITE_DATA_BACKEND=local` for the current localStorage database, or use `VITE_USE_BROWSER_STORE=false` only if you intentionally want the Express API.
 
    Split Bills receipt OCR uses Gemini from the backend. Add your key in `server/.env`:
 
@@ -55,7 +62,7 @@ A functional student budget tracking website built with React, Vite, Tailwind CS
    - Frontend: http://localhost:5173
    - Backend health: http://localhost:4000/api/health
 
-The SQLite database is created automatically at `server/data/student-budget.sqlite` and seeded with demo data.
+The app starts with no spending, budget, subscription, or split-bill data. In Supabase mode, auth and finance data are stored per authenticated user using row-level security. In local mode, browser data is stored per browser in `localStorage` under Spendly keys, so it also works when hosted as a static Vercel app. The optional Express/sql.js database is created at `server/data/student-budget.sqlite` for local API development and no longer seeds demo finance data.
 
 ## Useful Scripts
 

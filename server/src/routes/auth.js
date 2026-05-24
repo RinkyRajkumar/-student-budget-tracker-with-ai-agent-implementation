@@ -53,10 +53,10 @@ router.post(
       .prepare("INSERT INTO users (name, email, password_hash, currency) VALUES (?, ?, ?, ?)")
       .run(name, email.toLowerCase(), passwordHash, currency);
 
-    db.prepare("INSERT INTO budgets (user_id, monthly_limit_cents) VALUES (?, ?)").run(result.lastInsertRowid, 60000);
+    db.prepare("INSERT INTO budgets (user_id, monthly_limit_cents) VALUES (?, ?)").run(result.lastInsertRowid, 0);
     db.prepare(
       "INSERT INTO savings_goals (user_id, name, target_cents, current_cents) VALUES (?, ?, ?, ?)"
-    ).run(result.lastInsertRowid, "Emergency buffer", 50000, 0);
+    ).run(result.lastInsertRowid, "", 0, 0);
 
     const user = db.prepare("SELECT id, name, email, currency FROM users WHERE id = ?").get(result.lastInsertRowid);
     res.status(201).json({ user: publicUser(user), token: signToken(user) });

@@ -33,7 +33,7 @@ describe("student budget API", () => {
     assert.equal(body.ok, true);
   });
 
-  it("logs in demo user and returns protected summary", async () => {
+  it("logs in local user and returns an empty protected summary", async () => {
     const login = await request("/auth/login", {
       method: "POST",
       body: JSON.stringify({ email: "demo@student.edu", password: "Student123!" })
@@ -45,7 +45,8 @@ describe("student budget API", () => {
       headers: { Authorization: `Bearer ${login.body.token}` }
     });
     assert.equal(summary.response.status, 200);
-    assert.ok(summary.body.summary.monthlyTotal >= 0);
+    assert.equal(summary.body.summary.monthlyTotal, 0);
+    assert.equal(summary.body.summary.monthlyBudget, 0);
   });
 
   it("opens a local profile without showing the login page", async () => {
@@ -69,7 +70,7 @@ describe("student budget API", () => {
     assert.ok(advice.body.advice.suggestions.length > 0);
   });
 
-  it("lists recurring subscriptions stored locally", async () => {
+  it("starts with no recurring subscriptions", async () => {
     const local = await request("/auth/local");
     const listed = await request("/subscriptions", {
       headers: { Authorization: `Bearer ${local.body.token}` }
@@ -77,7 +78,7 @@ describe("student budget API", () => {
 
     assert.equal(listed.response.status, 200);
     assert.ok(Array.isArray(listed.body.subscriptions));
-    assert.ok(listed.body.subscriptions.some((subscription) => subscription.name.includes("Spotify")));
+    assert.equal(listed.body.subscriptions.length, 0);
   });
 
   it("rejects invalid expense amounts", async () => {
