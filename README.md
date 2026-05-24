@@ -1,4 +1,4 @@
-# Student Budget Tracker
+# Spendly - Budget Tracker
 
 A functional student budget tracking website built with React, Vite, Tailwind CSS, Express, SQLite, and Recharts.
 
