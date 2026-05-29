@@ -9,7 +9,7 @@ import { LoginPage, SignupPage } from "./components/AuthPages.jsx";
 import BudgetPage from "./components/BudgetPage.jsx";
 import BudgetPanel from "./components/BudgetPanel.jsx";
 import CategoryBadge, { getCategoryMeta } from "./components/CategoryBadge.jsx";
-import { CategoryChart, TrendChart } from "./components/Charts.jsx";
+import { CategoryChart, TrendChart, WeeklyStackedSpendingChart } from "./components/Charts.jsx";
 import EventsPage from "./components/EventsPage.jsx";
 import LandingPage from "./components/LandingPage.jsx";
 import OnboardingPage from "./components/OnboardingPage.jsx";
@@ -17,6 +17,7 @@ import StatCard from "./components/StatCard.jsx";
 import SubscriptionManagerPage from "./components/SubscriptionManagerPage.jsx";
 import SpendlyLogo from "./components/SpendlyLogo.jsx";
 import SpendlyLoader from "./components/SpendlyLoader.jsx";
+import SpendlyAppLoader from "./components/SpendlyAppLoader.jsx";
 import SpendlyConfirmHost from "./components/SpendlyConfirm.jsx";
 import { api, readUser, saveSession } from "./services/api.js";
 import { confirmSpendly } from "./services/confirmDialog.js";
@@ -53,6 +54,7 @@ const SIDEBAR_ORDER_KEY = "spendly_sidebar_order";
 const BUDGET_CATEGORIES_KEY = "spendly_budget_categories";
 const SPENDLY_CATEGORIES_KEY = "spendly_categories";
 const HIDDEN_BUDGET_ROWS_KEY = "spendly_hidden_budget_rows";
+const MIN_APP_LOADING_TIME = 3000;
 
 const defaultSidebarItems = [
   { id: "dashboard", label: "Dashboard", icon: Grid2X2, path: "/dashboard" },
@@ -185,7 +187,7 @@ export default function App() {
   }
 
   if (authChecking && path !== "/auth/callback") {
-    return <SpendlyLoader show message="Securing your budget space..." />;
+    return <SpendlyAppLoader show message="Preparing your dashboard..." />;
   }
 
   if (path === "/login") {
@@ -342,6 +344,7 @@ function Dashboard({ appUser, onLogout, onNavigate, activePath = "/dashboard" })
 
   useEffect(() => {
     let active = true;
+    const startedAt = Date.now();
     async function bootLocalProfile() {
       try {
         const response = await api.get("/auth/local");
@@ -351,7 +354,11 @@ function Dashboard({ appUser, onLogout, onNavigate, activePath = "/dashboard" })
       } catch (err) {
         if (active) setError(err.response?.data?.error?.message || "Could not open the local student profile.");
       } finally {
-        if (active) setBooting(false);
+        const elapsed = Date.now() - startedAt;
+        const remainingTime = Math.max(0, MIN_APP_LOADING_TIME - elapsed);
+        window.setTimeout(() => {
+          if (active) setBooting(false);
+        }, remainingTime);
       }
     }
     bootLocalProfile();
@@ -617,14 +624,7 @@ function Dashboard({ appUser, onLogout, onNavigate, activePath = "/dashboard" })
   }
 
   if (booting || !user) {
-    return (
-      <main className="flex min-h-screen items-center justify-center bg-slate-950 px-4 text-slate-100">
-        <div className="card w-full max-w-sm p-5 text-center">
-          <p className="text-sm font-semibold text-violet-300">Opening local student profile</p>
-          <p className="mt-2 text-2xl font-bold tracking-normal">Loading budget tracker</p>
-        </div>
-      </main>
-    );
+    return <SpendlyAppLoader show message="Preparing your dashboard..." />;
   }
 
   return (
@@ -718,7 +718,18 @@ function Dashboard({ appUser, onLogout, onNavigate, activePath = "/dashboard" })
           )}
 
           {activePath === "/reports" && (
-            <ReportsPage summary={summary} expenses={calendarExpenses} events={events} advice={advice} />
+            <ReportsPage
+              summary={summary}
+              expenses={calendarExpenses}
+              lastMonthExpenses={lastMonthExpenses}
+              events={events}
+              subscriptions={subscriptions}
+              advice={advice}
+              calendarMonth={calendarMonth}
+              onMonthChange={changeCalendarMonth}
+              onToday={jumpToToday}
+              onNavigate={onNavigate}
+            />
           )}
         </section>
       </div>
@@ -1446,37 +1457,124 @@ function CategoryBreakdownTable({ rows, onRemoveCategorySpending }) {
   );
 }
 
-function ReportsPage({ summary, expenses, events, advice }) {
+function ReportsPage({ summary, expenses, lastMonthExpenses = [], events, subscriptions = [], advice, calendarMonth, onMonthChange, onToday, onNavigate }) {
   const [eventFilter, setEventFilter] = useState("all");
   const rows = useMemo(() => {
     if (eventFilter === "all") return expenses;
     if (eventFilter === "event-only") return expenses.filter((expense) => expense.eventId);
     return expenses.filter((expense) => String(expense.eventId) === String(eventFilter));
   }, [eventFilter, expenses]);
+  const previousRows = useMemo(() => {
+    if (eventFilter === "all") return lastMonthExpenses;
+    if (eventFilter === "event-only") return lastMonthExpenses.filter((expense) => expense.eventId);
+    return lastMonthExpenses.filter((expense) => String(expense.eventId) === String(eventFilter));
+  }, [eventFilter, lastMonthExpenses]);
   const reportSummary = useMemo(() => buildReportSummary(rows, summary), [rows, summary]);
+  const categoryDifferences = useMemo(() => buildCategoryDifferenceReport(rows, previousRows), [rows, previousRows]);
   return (
     <div className="space-y-4">
       <section className="card p-4">
-        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
           <div>
             <h2 className="text-lg font-bold text-white">Reports</h2>
-            <p className="mt-1 text-sm text-slate-400">Filter analytics by all spending, event spending, or a specific event.</p>
+            <p className="mt-1 text-sm text-slate-400">Review spending analytics for {formatMonthLabel(calendarMonth)} across trends, categories, advice, and event filters.</p>
           </div>
-          <select className="input md:w-72" value={eventFilter} onChange={(event) => setEventFilter(event.target.value)}>
-            <option value="all">All spending</option>
-            <option value="event-only">Event spending only</option>
-            {events.map((event) => <option key={event.id} value={event.id}>{event.name}</option>)}
-          </select>
+          <div className="flex flex-col gap-3 md:flex-row md:items-center">
+            <div className="flex items-center gap-2 rounded-2xl border border-white/10 bg-slate-900/70 p-1">
+              <button className="btn-soft h-10 w-10 p-0" type="button" aria-label="Previous month" onClick={() => onMonthChange?.(-1)}>
+                <ArrowLeft size={16} />
+              </button>
+              <button className="h-10 min-w-32 rounded-xl bg-violet-500/15 px-4 text-sm font-black text-violet-100 transition hover:bg-violet-500/25" type="button" onClick={onToday}>
+                {formatMonthLabel(calendarMonth)}
+              </button>
+              <button className="btn-soft h-10 w-10 p-0" type="button" aria-label="Next month" onClick={() => onMonthChange?.(1)}>
+                <ArrowRight size={16} />
+              </button>
+            </div>
+            <select className="input md:w-72" value={eventFilter} onChange={(event) => setEventFilter(event.target.value)}>
+              <option value="all">All spending</option>
+              <option value="event-only">Event spending only</option>
+              {events.map((event) => <option key={event.id} value={event.id}>{event.name}</option>)}
+            </select>
+          </div>
         </div>
       </section>
       <div className="grid gap-4 xl:grid-cols-2">
+        <WeeklyStackedSpendingChart data={reportSummary.weeklyCategoryData} categories={reportSummary.weeklyCategories} />
+        <CategoryDifferenceCard rows={categoryDifferences} hasPreviousData={previousRows.length > 0} />
         <TrendChart data={reportSummary.trend} />
         <CategoryChart data={reportSummary.categories} />
         <div className="xl:col-span-2">
-          <AdvicePanel advice={advice} />
+          <AdvicePanel
+            advice={advice}
+            summary={summary}
+            categories={reportSummary.categories}
+            recurringTotal={subscriptions.filter((item) => item.active !== false).reduce((sum, item) => sum + Number(item.amount || 0), 0)}
+            onNavigate={onNavigate}
+          />
         </div>
       </div>
     </div>
+  );
+}
+
+function CategoryDifferenceCard({ rows, hasPreviousData }) {
+  return (
+    <section className="card p-4 xl:col-span-2">
+      <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h2 className="text-lg font-bold tracking-normal text-white">Category changes from last month</h2>
+          <p className="mt-1 text-sm text-slate-400">Top 5 categories where your spending moved the most compared with last month.</p>
+        </div>
+        <p className="text-xs font-semibold uppercase tracking-wide text-violet-200">Month over month</p>
+      </div>
+      <div className="mt-4 grid gap-3">
+        {rows.length ? rows.map((row) => {
+          const increased = row.difference > 0;
+          const unchanged = row.difference === 0;
+          const statusClass = unchanged ? "text-slate-300" : increased ? "text-amber-300" : "text-emerald-300";
+          const barWidth = `${Math.max(8, Math.min(100, row.changePercent || 0))}%`;
+          return (
+            <div key={row.category} className="rounded-3xl border border-white/10 bg-white/[0.035] p-3 transition hover:border-violet-300/30 hover:bg-white/[0.055]">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-center gap-3">
+                  <CategoryBadge category={row.category} size={38} iconSize={17} />
+                  <div>
+                    <h3 className="font-black text-white">{row.category}</h3>
+                    <p className="text-xs text-slate-500">Last month {formatCurrency(row.previous)} to this month {formatCurrency(row.current)}</p>
+                  </div>
+                </div>
+                <div className="text-left sm:text-right">
+                  <p className={`text-base font-black tabular-nums ${statusClass}`}>
+                    {unchanged ? "No change" : `${increased ? "+" : "-"}${formatCurrency(Math.abs(row.difference))}`}
+                  </p>
+                  <p className="text-xs text-slate-500">{unchanged ? "Same as last month" : `${Math.round(row.changePercent)}% ${increased ? "more" : "less"}`}</p>
+                </div>
+              </div>
+              <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-800/80">
+                <div
+                  className="h-full rounded-full transition-all duration-500"
+                  style={{
+                    width: barWidth,
+                    background: increased
+                      ? "linear-gradient(90deg,#f59e0b,#f97316)"
+                      : unchanged
+                        ? "linear-gradient(90deg,#64748b,#94a3b8)"
+                        : "linear-gradient(90deg,#10b981,#22c55e)"
+                  }}
+                />
+              </div>
+            </div>
+          );
+        }) : (
+          <div className="rounded-3xl border border-dashed border-violet-300/20 bg-white/[0.03] p-6 text-center text-sm text-slate-400">
+            {hasPreviousData
+              ? "Add spending this month to compare category changes."
+              : "Category changes will be available next month after you have spending data from both months."}
+          </div>
+        )}
+      </div>
+    </section>
   );
 }
 
@@ -1493,7 +1591,72 @@ function buildReportSummary(expenses, fallbackSummary) {
     acc[expense.date].total += Number(expense.amount || 0);
     return acc;
   }, {})).sort((a, b) => a.date.localeCompare(b.date));
-  return { ...fallbackSummary, categories, trend, monthlyTotal: total };
+  const weekly = buildWeeklyCategoryReport(expenses);
+  return { ...fallbackSummary, categories, trend, weeklyCategoryData: weekly.data, weeklyCategories: weekly.categories, monthlyTotal: total };
+}
+
+function buildCategoryDifferenceReport(currentRows, previousRows) {
+  if (!previousRows.length) return [];
+  const current = groupByCategory(currentRows);
+  const previous = groupByCategory(previousRows);
+  const categories = [...new Set([...Object.keys(current), ...Object.keys(previous)])];
+  return categories
+    .map((category) => {
+      const currentAmount = current[category] || 0;
+      const previousAmount = previous[category] || 0;
+      const difference = currentAmount - previousAmount;
+      const base = previousAmount || currentAmount || 1;
+      return {
+        category,
+        current: currentAmount,
+        previous: previousAmount,
+        difference,
+        changePercent: Math.abs(difference / base) * 100
+      };
+    })
+    .filter((row) => row.current > 0 || row.previous > 0)
+    .sort((a, b) => Math.abs(b.difference) - Math.abs(a.difference))
+    .slice(0, 5);
+}
+
+function buildWeeklyCategoryReport(expenses) {
+  const sorted = [...expenses].filter((expense) => expense.date).sort((a, b) => a.date.localeCompare(b.date));
+  const categories = [...new Set(sorted.map((expense) => expense.category || "Other"))]
+    .sort((a, b) => {
+      const totalFor = (name) => sorted.reduce((sum, expense) => sum + ((expense.category || "Other") === name ? Number(expense.amount || 0) : 0), 0);
+      return totalFor(b) - totalFor(a);
+    })
+    .slice(0, 8);
+  const rows = new Map();
+  sorted.forEach((expense) => {
+    const date = new Date(`${expense.date}T00:00:00`);
+    if (Number.isNaN(date.getTime())) return;
+    const weekStart = new Date(date);
+    weekStart.setDate(date.getDate() - date.getDay());
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekStart.getDate() + 6);
+    const key = weekStart.toISOString().slice(0, 10);
+    const category = categories.includes(expense.category || "Other") ? expense.category || "Other" : "Other";
+    if (!rows.has(key)) {
+      rows.set(key, {
+        weekLabel: `W${rows.size + 1}`,
+        range: `${weekStart.toLocaleDateString("en-IN", { day: "numeric", month: "short" })} - ${weekEnd.toLocaleDateString("en-IN", { day: "numeric", month: "short" })}`,
+        weekStart: key
+      });
+    }
+    const row = rows.get(key);
+    row[category] = (row[category] || 0) + Number(expense.amount || 0);
+  });
+  const finalCategories = [...new Set([...categories, ...(sorted.some((expense) => !categories.includes(expense.category || "Other")) ? ["Other"] : [])])];
+  return {
+    categories: finalCategories,
+    data: [...rows.values()].map((row) => {
+      finalCategories.forEach((category) => {
+        row[category] = row[category] || 0;
+      });
+      return row;
+    })
+  };
 }
 
 function renderActiveSpendingSlice(props) {

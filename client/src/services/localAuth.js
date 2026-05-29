@@ -145,13 +145,17 @@ export async function redoOnboarding() {
 
 export async function signInWithGoogle() {
   if (!isSupabaseEnabled()) throw new Error("Supabase is not configured.");
-  window.location.assign(googleOAuthUrl());
-}
-
-export function googleOAuthUrl() {
-  const redirectTo = `${window.location.origin}/auth/callback`;
-  const baseUrl = import.meta.env.VITE_SUPABASE_URL || import.meta.env.NEXT_PUBLIC_SUPABASE_URL;
-  return `${baseUrl}/auth/v1/authorize?provider=google&redirect_to=${encodeURIComponent(redirectTo)}`;
+  const { error } = await getSupabase().auth.signInWithOAuth({
+    provider: "google",
+    options: {
+      redirectTo: `${window.location.origin}/auth/callback`,
+      queryParams: {
+        access_type: "offline",
+        prompt: "consent"
+      }
+    }
+  });
+  if (error) throw new Error(error.message);
 }
 
 export async function resetPassword(email) {

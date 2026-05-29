@@ -89,6 +89,60 @@ input[type="datetime-local"]:hover::-webkit-calendar-picker-indicator {
   @apply btn bg-rose-500/15 text-rose-200 hover:bg-rose-500/25;
 }
 
+.auth-card-draw {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  transform-origin: 50% 16%;
+  animation: authCardEnter 780ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.auth-card-draw::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background:
+    linear-gradient(90deg, transparent, rgba(167, 139, 250, 0.95), transparent) 0 0 / 0% 1px no-repeat,
+    linear-gradient(180deg, transparent, rgba(34, 211, 238, 0.55), transparent) 100% 0 / 1px 0% no-repeat,
+    linear-gradient(270deg, transparent, rgba(192, 132, 252, 0.75), transparent) 100% 100% / 0% 1px no-repeat,
+    linear-gradient(0deg, transparent, rgba(139, 92, 246, 0.8), transparent) 0 100% / 1px 0% no-repeat;
+  pointer-events: none;
+  animation: authBorderDraw 1200ms cubic-bezier(0.16, 1, 0.3, 1) 120ms forwards;
+}
+
+.auth-card-draw::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border-radius: inherit;
+  background: radial-gradient(circle at var(--auth-pointer-x, 50%) var(--auth-pointer-y, 50%), rgba(139, 92, 246, 0.16), transparent 15rem);
+  opacity: 0.55;
+  transition: opacity 260ms ease, background-position 260ms ease;
+  pointer-events: none;
+}
+
+.auth-card-draw:hover::after {
+  opacity: 0.9;
+}
+
+.auth-card-draw > * {
+  position: relative;
+  z-index: 1;
+  animation: authContentLift 680ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.auth-card-draw > *:nth-child(2) {
+  animation-delay: 60ms;
+}
+
+.auth-card-draw > *:nth-child(3) {
+  animation-delay: 120ms;
+}
+
 .recharts-default-tooltip {
   background: #0f172a !important;
   border: 1px solid rgba(167, 139, 250, 0.25) !important;
@@ -110,6 +164,51 @@ select,
 button,
 textarea {
   border-radius: 14px;
+}
+
+@keyframes authCardEnter {
+  0% {
+    opacity: 0;
+    transform: translateY(24px) scale(0.965);
+    box-shadow: 0 0 0 rgba(139, 92, 246, 0);
+  }
+  62% {
+    opacity: 1;
+    transform: translateY(-3px) scale(1.006);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes authContentLift {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes authBorderDraw {
+  0% {
+    background-size: 0% 1px, 1px 0%, 0% 1px, 1px 0%;
+  }
+  28% {
+    background-size: 100% 1px, 1px 0%, 0% 1px, 1px 0%;
+  }
+  54% {
+    background-size: 100% 1px, 1px 100%, 0% 1px, 1px 0%;
+  }
+  78% {
+    background-size: 100% 1px, 1px 100%, 100% 1px, 1px 0%;
+  }
+  100% {
+    background-size: 100% 1px, 1px 100%, 100% 1px, 1px 100%;
+  }
 }
 
 @keyframes slideInNext {
@@ -1266,7 +1365,8 @@ textarea {
   animation-delay: 820ms;
 }
 
-.spendly-loader-overlay {
+.spendly-loader-overlay,
+.spendly-app-loader {
   position: fixed;
   top: 0;
   left: 0;
@@ -1283,10 +1383,11 @@ textarea {
     linear-gradient(135deg, #050614, #0b0618, #160b2e);
   backdrop-filter: blur(16px);
   pointer-events: auto;
-  animation: spendlyLoaderFade 240ms ease-out;
+  animation: spendlyLoaderFade 420ms ease-out, spendlyBackgroundGlow 8s ease-in-out infinite alternate;
 }
 
-.spendly-loader-card {
+.spendly-loader-card,
+.spendly-loader-content {
   position: relative;
   z-index: 1;
   display: grid;
@@ -1294,6 +1395,16 @@ textarea {
   justify-items: center;
   padding: 2.5rem 1.5rem;
   text-align: center;
+}
+
+.spendly-loader-content::before {
+  content: "";
+  position: absolute;
+  inset: 0.25rem;
+  z-index: -1;
+  border-radius: 2rem;
+  background: radial-gradient(circle, rgba(139, 92, 246, 0.12), transparent 62%);
+  filter: blur(18px);
 }
 
 .spendly-loader-logo {
@@ -1314,7 +1425,8 @@ textarea {
   font-size: clamp(2.4rem, 10vw, 3.25rem);
 }
 
-.spendly-loader-text {
+.spendly-loader-text,
+.spendly-loader-message {
   margin-top: 1.75rem;
   color: #dbeafe;
   font-size: 0.98rem;
@@ -1341,7 +1453,8 @@ textarea {
   animation: spendlyProgress 1s ease-in-out infinite;
 }
 
-.spendly-loader-orb {
+.spendly-loader-orb,
+.spendly-app-loader-glow {
   position: absolute;
   width: 18rem;
   height: 18rem;
@@ -1351,17 +1464,28 @@ textarea {
   animation: spendlyOrbDrift 7s ease-in-out infinite alternate;
 }
 
-.spendly-loader-orb-one {
+.spendly-loader-orb-one,
+.spendly-app-loader-glow-one {
   left: 12%;
   top: 16%;
   background: rgba(139, 92, 246, 0.58);
 }
 
-.spendly-loader-orb-two {
+.spendly-loader-orb-two,
+.spendly-app-loader-glow-two {
   right: 12%;
   bottom: 12%;
   background: rgba(76, 29, 149, 0.72);
   animation-delay: 900ms;
+}
+
+@keyframes spendlyBackgroundGlow {
+  from {
+    background-position: 0% 50%;
+  }
+  to {
+    background-position: 100% 50%;
+  }
 }
 
 @keyframes spendlyLoaderFade {
@@ -1484,9 +1608,14 @@ textarea {
 
 @media (prefers-reduced-motion: reduce) {
   .spendly-loader-overlay,
+  .spendly-app-loader,
   .spendly-loader-logo,
   .spendly-loader-progress::after,
-  .spendly-loader-orb {
+  .spendly-loader-orb,
+  .spendly-app-loader-glow,
+  .auth-card-draw,
+  .auth-card-draw::before,
+  .auth-card-draw > * {
     animation-duration: 1ms;
     animation-iteration-count: 1;
   }

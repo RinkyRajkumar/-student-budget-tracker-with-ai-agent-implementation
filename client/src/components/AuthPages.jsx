@@ -1,6 +1,6 @@
 import { ArrowLeft, ArrowRight, CheckCircle2, ExternalLink, MailCheck } from "lucide-react";
 import { useState } from "react";
-import { googleOAuthUrl, loginUser, resetPassword, signupUser } from "../services/localAuth.js";
+import { loginUser, resetPassword, signInWithGoogle, signupUser } from "../services/localAuth.js";
 import SpendlyLoader from "./SpendlyLoader.jsx";
 
 export function LoginPage({ onNavigate, onLogin }) {
@@ -24,10 +24,16 @@ export function LoginPage({ onNavigate, onLogin }) {
     }
   }
 
-  function loginWithGoogle() {
+  async function loginWithGoogle() {
     setError("");
     setMessage("");
     setIsLoading(true);
+    try {
+      await signInWithGoogle();
+    } catch (err) {
+      setIsLoading(false);
+      setError(err.message);
+    }
   }
 
   async function forgotPassword() {
@@ -61,10 +67,10 @@ export function LoginPage({ onNavigate, onLogin }) {
         or
         <span className="h-px flex-1 bg-white/10" />
       </div>
-      <a className={`btn-soft w-full justify-center py-3 ${isLoading ? "pointer-events-none opacity-70" : ""}`} href={googleOAuthUrl()} onClick={loginWithGoogle}>
+      <button className="btn-soft w-full justify-center py-3" type="button" disabled={isLoading} onClick={loginWithGoogle}>
         <span className="grid h-6 w-6 place-items-center rounded-full bg-white text-sm font-black text-slate-950">G</span>
         Continue with Google
-      </a>
+      </button>
       <p className="mt-5 text-center text-sm text-slate-400">
         New here? <button className="font-semibold text-violet-300" onClick={() => onNavigate("/signup")}>Create an account</button>
       </p>
@@ -102,10 +108,16 @@ export function SignupPage({ onNavigate, onSignup }) {
     }
   }
 
-  function signupWithGoogle() {
+  async function signupWithGoogle() {
     setError("");
     setMessage("");
     setIsLoading(true);
+    try {
+      await signInWithGoogle();
+    } catch (err) {
+      setIsLoading(false);
+      setError(err.message);
+    }
   }
 
   return (
@@ -117,10 +129,10 @@ export function SignupPage({ onNavigate, onSignup }) {
         onLogin={() => onNavigate("/login")}
         onClose={() => setVerificationEmail("")}
       />
-      <a className={`btn-soft mb-5 w-full justify-center py-3 ${isLoading ? "pointer-events-none opacity-70" : ""}`} href={googleOAuthUrl()} onClick={signupWithGoogle}>
+      <button className="btn-soft mb-5 w-full justify-center py-3" type="button" disabled={isLoading} onClick={signupWithGoogle}>
         <span className="grid h-6 w-6 place-items-center rounded-full bg-white text-sm font-black text-slate-950">G</span>
         Continue with Google
-      </a>
+      </button>
       <div className="mb-5 flex items-center gap-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
         <span className="h-px flex-1 bg-white/10" />
         or sign up with email
@@ -230,13 +242,28 @@ function getPasswordStrength(password) {
 }
 
 function AuthShell({ title, subtitle, children, onNavigate }) {
+  const [pointer, setPointer] = useState({ x: 50, y: 50 });
+
+  function updatePointer(event) {
+    const rect = event.currentTarget.getBoundingClientRect();
+    setPointer({
+      x: Math.round(((event.clientX - rect.left) / rect.width) * 100),
+      y: Math.round(((event.clientY - rect.top) / rect.height) * 100)
+    });
+  }
+
   return (
     <main className="flex min-h-screen items-center justify-center bg-[radial-gradient(circle_at_top,rgba(124,58,237,0.28),transparent_30rem),#070816] px-4 py-10 text-slate-100">
       <section className="w-full max-w-md">
         <button className="btn-soft mb-4 px-3" onClick={() => onNavigate("/")}>
           <ArrowLeft size={16} /> Home
         </button>
-        <div className="card p-5 md:p-6">
+        <div
+          className="card auth-card-draw p-5 md:p-6"
+          onMouseMove={updatePointer}
+          onMouseLeave={() => setPointer({ x: 50, y: 50 })}
+          style={{ "--auth-pointer-x": `${pointer.x}%`, "--auth-pointer-y": `${pointer.y}%` }}
+        >
           <h1 className="text-3xl font-black tracking-normal">{title}</h1>
           <p className="mt-2 text-sm leading-6 text-slate-400">{subtitle}</p>
           <div className="mt-6">{children}</div>

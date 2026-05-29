@@ -30,8 +30,7 @@ const emptyEvent = {
   startDate: localDateString(),
   endDate: localDateString(),
   budgetAmount: "",
-  notes: "",
-  category: "Food"
+  notes: ""
 };
 
 export default function EventsPage({ user, categories = [], expenses = [], events = [], onCreateEvent, onUpdateEvent, onDeleteEvent, onAddExpense, onDeleteExpense }) {
@@ -298,8 +297,7 @@ function EventModal({ event, onClose, onSave }) {
           <label className="block text-sm font-semibold text-slate-300">Event type<select className="input mt-2" value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}>{eventTypes.map((type) => <option key={type}>{type}</option>)}</select></label>
           <PurpleDateField label="Start date" value={form.startDate} onChange={(value) => setForm({ ...form, startDate: value })} />
           <PurpleDateField label="End date" value={form.endDate} onChange={(value) => setForm({ ...form, endDate: value })} />
-          <label className="block text-sm font-semibold text-slate-300">Total budget<input className="input mt-2" type="number" min="1" value={form.budgetAmount} onChange={(e) => setForm({ ...form, budgetAmount: e.target.value })} /></label>
-          <label className="block text-sm font-semibold text-slate-300">Default category<select className="input mt-2" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>{["Food", "Transport", "Shopping", "Entertainment", "Travel", "Other"].map((category) => <option key={category}>{category}</option>)}</select></label>
+          <label className="block text-sm font-semibold text-slate-300 sm:col-span-2">Total budget<input className="input mt-2" type="number" min="1" value={form.budgetAmount} onChange={(e) => setForm({ ...form, budgetAmount: e.target.value })} /></label>
           <label className="block text-sm font-semibold text-slate-300 sm:col-span-2">Notes<textarea className="input mt-2 min-h-24" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} /></label>
         </div>
         {form.endDate < form.startDate && <p className="mt-3 text-sm font-semibold text-amber-300">End date cannot be before start date.</p>}
@@ -388,7 +386,7 @@ function EventExpenseModal({ event, categories, onClose, onSave }) {
   const categoryRows = mergeEventExpenseCategories(categories);
   const [form, setForm] = useState({
     amount: "",
-    categoryId: categoryRows.find((item) => item.name === event.category)?.id || categoryRows[0]?.id || "",
+    categoryId: categoryRows[0]?.id || "",
     paymentMethod: "upi",
     date: localDateString(),
     note: ""

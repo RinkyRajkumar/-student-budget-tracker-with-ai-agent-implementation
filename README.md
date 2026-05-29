@@ -48,6 +48,7 @@ A functional student budget tracking website built with React, Vite, Tailwind CS
    - Turn on email confirmation for signup verification.
    - Enable the Google provider in Supabase Auth.
    - Create a Google OAuth Client ID and Client Secret in Google Cloud.
+   - Add the Google Client ID and Client Secret inside Supabase Auth > Providers > Google. The React app uses `supabase.auth.signInWithOAuth`; do not hardcode the Google secret in frontend code.
    - Add redirect URLs in Supabase and Google OAuth settings:
      - `http://localhost:5173/auth/callback`
      - `https://your-vercel-domain.vercel.app/auth/callback`
