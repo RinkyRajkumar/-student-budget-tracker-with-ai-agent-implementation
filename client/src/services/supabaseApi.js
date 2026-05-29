@@ -43,7 +43,26 @@ function normalizeExpense(row) {
     date: row.spent_on,
     note: row.note || "",
     paymentMethod: row.payment_method,
+    eventId: row.event_id || null,
+    eventName: row.event_name || null,
     createdAt: row.created_at
+  };
+}
+
+function normalizeEvent(row) {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    name: row.name,
+    type: row.type || "Other",
+    startDate: row.start_date,
+    endDate: row.end_date,
+    budgetAmount: Number(row.budget_amount || 0),
+    notes: row.notes || "",
+    category: row.category || "Food",
+    completed: Boolean(row.completed),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
   };
 }
 
@@ -213,6 +232,16 @@ async function loadSubscriptions(supabase, userId) {
   return (data || []).map(normalizeSubscription);
 }
 
+async function loadEvents(supabase, userId) {
+  const { data, error } = await supabase
+    .from("spendly_events")
+    .select("*")
+    .eq("user_id", userId)
+    .order("start_date", { ascending: false });
+  if (error) throw error;
+  return (data || []).map(normalizeEvent);
+}
+
 export const supabaseApi = {
   async get(path, config = {}) {
     const { supabase, user } = await requireSupabaseUser();
@@ -223,6 +252,7 @@ export const supabaseApi = {
     if (path === "/budget") return response(await loadBudget(supabase, user.id));
     if (path === "/savings-goal") return response({ goal: await loadGoal(supabase, user.id) });
     if (path === "/subscriptions") return response({ subscriptions: await loadSubscriptions(supabase, user.id) });
+    if (path === "/events") return response({ events: await loadEvents(supabase, user.id) });
     if (path === "/summary") {
       const [expenses, budget, categories] = await Promise.all([loadExpenses(supabase, user.id), loadBudget(supabase, user.id), loadCategories(supabase, user.id)]);
       return response({ summary: buildSummary(expenses, budget, categories, params.month || month()) });
@@ -253,7 +283,9 @@ export const supabaseApi = {
           amount: Number(payload.amount || 0),
           spent_on: payload.date,
           note: payload.note || "",
-          payment_method: payload.paymentMethod || "other"
+          payment_method: payload.paymentMethod || "other",
+          event_id: payload.eventId || null,
+          event_name: payload.eventName || null
         })
         .select()
         .single();
@@ -281,6 +313,25 @@ export const supabaseApi = {
       if (error) throw error;
       return response({ subscription: normalizeSubscription(data) });
     }
+    if (path === "/events") {
+      const { data, error } = await supabase
+        .from("spendly_events")
+        .insert({
+          user_id: user.id,
+          name: payload.name,
+          type: payload.type || "Other",
+          start_date: payload.startDate,
+          end_date: payload.endDate,
+          budget_amount: Number(payload.budgetAmount || 0),
+          notes: payload.notes || "",
+          category: payload.category || "Food",
+          completed: Boolean(payload.completed)
+        })
+        .select()
+        .single();
+      if (error) throw error;
+      return response({ event: normalizeEvent(data) });
+    }
     throw new Error(`Unsupported Supabase API route: ${path}`);
   },
   async put(path, payload) {
@@ -288,6 +339,7 @@ export const supabaseApi = {
     const categories = await loadCategories(supabase, user.id);
     const expenseMatch = path.match(/^\/expenses\/(\d+)$/);
     const subscriptionMatch = path.match(/^\/subscriptions\/(\d+)$/);
+    const eventMatch = path.match(/^\/events\/([0-9a-f-]+)$/i);
     if (expenseMatch) {
       const category = categoryById(categories, payload.categoryId);
       const { data, error } = await supabase
@@ -299,7 +351,9 @@ export const supabaseApi = {
           amount: Number(payload.amount || 0),
           spent_on: payload.date,
           note: payload.note || "",
-          payment_method: payload.paymentMethod || "other"
+          payment_method: payload.paymentMethod || "other",
+          event_id: payload.eventId || null,
+          event_name: payload.eventName || null
         })
         .eq("user_id", user.id)
         .eq("id", Number(expenseMatch[1]))
@@ -356,12 +410,34 @@ export const supabaseApi = {
       if (error) throw error;
       return response({ subscription: normalizeSubscription(data) });
     }
+    if (eventMatch) {
+      const { data, error } = await supabase
+        .from("spendly_events")
+        .update({
+          name: payload.name,
+          type: payload.type || "Other",
+          start_date: payload.startDate,
+          end_date: payload.endDate,
+          budget_amount: Number(payload.budgetAmount || 0),
+          notes: payload.notes || "",
+          category: payload.category || "Food",
+          completed: Boolean(payload.completed),
+          updated_at: new Date().toISOString()
+        })
+        .eq("user_id", user.id)
+        .eq("id", eventMatch[1])
+        .select()
+        .single();
+      if (error) throw error;
+      return response({ event: normalizeEvent(data) });
+    }
     throw new Error(`Unsupported Supabase API route: ${path}`);
   },
   async delete(path) {
     const { supabase, user } = await requireSupabaseUser();
     const expenseMatch = path.match(/^\/expenses\/(\d+)$/);
     const subscriptionMatch = path.match(/^\/subscriptions\/(\d+)$/);
+    const eventMatch = path.match(/^\/events\/([0-9a-f-]+)$/i);
     if (expenseMatch) {
       const { error } = await supabase.from("spendly_expenses").delete().eq("user_id", user.id).eq("id", Number(expenseMatch[1]));
       if (error) throw error;
@@ -369,6 +445,11 @@ export const supabaseApi = {
     }
     if (subscriptionMatch) {
       const { error } = await supabase.from("spendly_subscriptions").delete().eq("user_id", user.id).eq("id", Number(subscriptionMatch[1]));
+      if (error) throw error;
+      return response({});
+    }
+    if (eventMatch) {
+      const { error } = await supabase.from("spendly_events").delete().eq("user_id", user.id).eq("id", eventMatch[1]);
       if (error) throw error;
       return response({});
     }

@@ -10,6 +10,7 @@ import {
   XAxis,
   YAxis
 } from "recharts";
+import CategoryBadge, { getCategoryMeta } from "./CategoryBadge.jsx";
 import { formatCurrency } from "../services/currency.js";
 
 export function CategoryChart({ data }) {
@@ -22,7 +23,7 @@ export function CategoryChart({ data }) {
             <PieChart>
               <Pie data={data} dataKey="total" nameKey="name" outerRadius={82} innerRadius={44} paddingAngle={2}>
                 {data.map((entry) => (
-                  <Cell key={entry.name} fill={entry.color} />
+                  <Cell key={entry.name} fill={getCategoryMeta(entry.name).color || entry.color} />
                 ))}
               </Pie>
               <Tooltip
@@ -41,7 +42,7 @@ export function CategoryChart({ data }) {
         {data.slice(0, 5).map((item) => (
           <div key={item.name} className="flex items-center justify-between gap-3 text-sm text-slate-200">
             <span className="flex items-center gap-2">
-              <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: item.color }} />
+              <CategoryBadge category={item.name} size={26} iconSize={13} />
               {item.name}
             </span>
             <span className="font-semibold tabular-nums">{formatCurrency(item.total)}</span>

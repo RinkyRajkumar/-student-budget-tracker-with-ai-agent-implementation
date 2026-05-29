@@ -1,13 +1,13 @@
-import { ArrowLeft, ArrowRight, CalendarDays, Check, Goal, Plus, Sparkles, Trash2, WalletCards } from "lucide-react";
+import { ArrowLeft, ArrowRight, CalendarDays, Check, Sparkles, WalletCards } from "lucide-react";
 import { useMemo, useState } from "react";
 import { saveOnboarding } from "../services/localAuth.js";
 import SpendlyLoader from "./SpendlyLoader.jsx";
 
 const categoryOptions = ["Food", "Transport", "Books", "Rent", "Tuition", "Entertainment", "Health", "Shopping", "Subscriptions", "Other"];
-const totalSteps = 7;
+const totalSteps = 4;
 
 const initialOnboardingData = {
-  monthlyIncome: "",
+  monthlyIncome: "0",
   monthlyBudget: "",
   goalName: "",
   goalTargetAmount: "",
@@ -20,8 +20,8 @@ export default function OnboardingPage({ user, onComplete }) {
   const [step, setStep] = useState(1);
   const [direction, setDirection] = useState("next");
   const [onboardingData, setOnboardingData] = useState(initialOnboardingData);
-  const [subscription, setSubscription] = useState({ name: "", amount: "", billingCycle: "1", billingDay: "1" });
   const [isCompleting, setIsCompleting] = useState(false);
+  const [finishError, setFinishError] = useState("");
 
   const progress = useMemo(() => Math.round((step / totalSteps) * 100), [step]);
   const canContinue = isStepValid(step, onboardingData);
@@ -45,36 +45,18 @@ export default function OnboardingPage({ user, onComplete }) {
     });
   }
 
-  function addSubscription() {
-    if (!subscription.name.trim() || !subscription.amount) return;
-    setOnboardingData((current) => ({
-      ...current,
-      subscriptions: [
-        ...current.subscriptions,
-        {
-          name: subscription.name.trim(),
-          amount: Number(subscription.amount),
-          billingCycle: Number(subscription.billingCycle),
-          billingDay: Number(subscription.billingDay)
-        }
-      ]
-    }));
-    setSubscription({ name: "", amount: "", billingCycle: "1", billingDay: "1" });
-  }
-
-  function removeSubscription(index) {
-    setOnboardingData((current) => ({
-      ...current,
-      subscriptions: current.subscriptions.filter((_, itemIndex) => itemIndex !== index)
-    }));
-  }
-
-  function finish() {
+  async function finish() {
     if (!canContinue) return;
-    const saved = saveOnboarding(onboardingData);
-    localStorage.setItem("onboardingComplete", "true");
-    setIsCompleting(true);
-    window.setTimeout(() => onComplete(saved), 1000);
+    setFinishError("");
+    try {
+      setIsCompleting(true);
+      const saved = await saveOnboarding(onboardingData);
+      localStorage.setItem("onboardingComplete", "true");
+      window.setTimeout(() => onComplete(saved), 1000);
+    } catch (error) {
+      setIsCompleting(false);
+      setFinishError(error.message || "Could not save onboarding.");
+    }
   }
 
   return (
@@ -95,42 +77,21 @@ export default function OnboardingPage({ user, onComplete }) {
           </div>
 
           <div key={step} className={`min-h-[25rem] transition duration-300 ${direction === "next" ? "animate-slideInNext" : "animate-slideInBack"}`}>
+            {finishError && <p className="mb-4 rounded-lg bg-rose-500/15 px-3 py-2 text-sm text-rose-200">{finishError}</p>}
             {step === 1 && <WelcomeStep user={user} onStart={() => move(2)} />}
             {step === 2 && (
-              <IncomeStep
-                value={onboardingData.monthlyIncome}
-                onChange={(value) => updateField("monthlyIncome", value)}
-              />
-            )}
-            {step === 3 && (
               <BudgetStep
                 value={onboardingData.monthlyBudget}
                 onChange={(value) => updateField("monthlyBudget", value)}
               />
             )}
-            {step === 4 && (
-              <SavingsStep
-                data={onboardingData}
-                onChange={updateField}
-              />
-            )}
-            {step === 5 && (
+            {step === 3 && (
               <CategoriesStep
                 selected={onboardingData.categories}
                 onToggle={toggleCategory}
               />
             )}
-            {step === 6 && (
-              <SubscriptionsStep
-                subscription={subscription}
-                setSubscription={setSubscription}
-                subscriptions={onboardingData.subscriptions}
-                onAdd={addSubscription}
-                onRemove={removeSubscription}
-                onSkip={() => move(7)}
-              />
-            )}
-            {step === 7 && <FinishStep data={onboardingData} />}
+            {step === 4 && <FinishStep data={onboardingData} />}
           </div>
 
           {step > 1 && (
@@ -169,13 +130,12 @@ function VisualPanel({ step, user, onboardingData }) {
           <p className="mt-5 text-sm font-semibold text-violet-300">SpendWise setup</p>
           <h1 className="mt-2 text-4xl font-black tracking-normal text-white">A focused setup for {user?.name || "your"} budget.</h1>
           <p className="mt-4 text-sm leading-6 text-slate-400">
-            One decision at a time. Your dashboard will adapt to your budget limit, goals, spending categories, and recurring costs.
+            One decision at a time. Your dashboard will adapt to your budget limit, spending categories, and recurring costs.
           </p>
         </div>
         <div className="space-y-3">
-          <PreviewRow icon={WalletCards} label="Monthly budget" value={onboardingData.monthlyBudget ? `Rs ${onboardingData.monthlyBudget}` : "Not set"} active={step >= 3} />
-          <PreviewRow icon={Goal} label="Savings goal" value={onboardingData.goalName || "Not set"} active={step >= 4} />
-          <PreviewRow icon={CalendarDays} label="Categories" value={`${onboardingData.categories.length} selected`} active={step >= 5} />
+          <PreviewRow icon={WalletCards} label="Monthly budget" value={onboardingData.monthlyBudget ? `Rs ${onboardingData.monthlyBudget}` : "Not set"} active={step >= 2} />
+          <PreviewRow icon={CalendarDays} label="Categories" value={`${onboardingData.categories.length} selected`} active={step >= 3} />
         </div>
       </div>
     </aside>
@@ -224,56 +184,15 @@ function WelcomeStep({ user, onStart }) {
   );
 }
 
-function IncomeStep({ value, onChange }) {
-  return (
-    <div className="flex min-h-[25rem] flex-col justify-center">
-      <StepHeader
-        eyebrow="Income"
-        title="What is your monthly income?"
-        helper="This helps calculate your safe-to-spend amount."
-      />
-      <input className="input mt-8 max-w-md py-3 text-lg" type="number" min="1" placeholder="Example: 30000" value={value} onChange={(event) => onChange(event.target.value)} autoFocus />
-    </div>
-  );
-}
-
 function BudgetStep({ value, onChange }) {
   return (
     <div className="flex min-h-[25rem] flex-col justify-center">
       <StepHeader
         eyebrow="Monthly budget"
-        title="Set your spending limit."
-        helper="Set the maximum amount you want to spend this month."
+        title="What is your monthly budget?"
+        helper="This will be added to your Budget page and used to calculate your remaining budget."
       />
       <input className="input mt-8 max-w-md py-3 text-lg" type="number" min="1" placeholder="Example: 18000" value={value} onChange={(event) => onChange(event.target.value)} autoFocus />
-    </div>
-  );
-}
-
-function SavingsStep({ data, onChange }) {
-  return (
-    <div className="flex min-h-[25rem] flex-col justify-center">
-      <StepHeader
-        eyebrow="Savings goal"
-        title="What are you saving for?"
-        helper="Add a clear goal so your dashboard can show progress every month."
-      />
-      <div className="mt-8 grid gap-4">
-        <label className="block text-sm font-semibold text-slate-300">
-          Goal name
-          <input className="input mt-2 py-3" placeholder="New laptop, trip, emergency fund" value={data.goalName} onChange={(event) => onChange("goalName", event.target.value)} />
-        </label>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <label className="block text-sm font-semibold text-slate-300">
-            Target amount
-            <input className="input mt-2 py-3" type="number" min="1" placeholder="Example: 50000" value={data.goalTargetAmount} onChange={(event) => onChange("goalTargetAmount", event.target.value)} />
-          </label>
-          <label className="block text-sm font-semibold text-slate-300">
-            Target date <span className="font-normal text-slate-500">(optional)</span>
-            <input className="input mt-2 py-3" type="date" value={data.targetDate} onChange={(event) => onChange("targetDate", event.target.value)} />
-          </label>
-        </div>
-      </div>
     </div>
   );
 }
@@ -301,49 +220,6 @@ function CategoriesStep({ selected, onToggle }) {
   );
 }
 
-function SubscriptionsStep({ subscription, setSubscription, subscriptions, onAdd, onRemove, onSkip }) {
-  return (
-    <div className="flex min-h-[25rem] flex-col justify-center">
-      <StepHeader
-        eyebrow="Optional subscriptions"
-        title="Add recurring payments now?"
-        helper="Track services like Spotify, Netflix, study apps, meal plans, or gym memberships. You can skip this and add them later."
-      />
-      <div className="mt-8 grid gap-3 sm:grid-cols-[1fr_0.65fr]">
-        <input className="input py-3" placeholder="Subscription name" value={subscription.name} onChange={(event) => setSubscription({ ...subscription, name: event.target.value })} />
-        <input className="input py-3" type="number" min="1" placeholder="Amount" value={subscription.amount} onChange={(event) => setSubscription({ ...subscription, amount: event.target.value })} />
-        <select className="input py-3" value={subscription.billingCycle} onChange={(event) => setSubscription({ ...subscription, billingCycle: event.target.value })}>
-          <option value="1">Monthly</option>
-          <option value="3">Quarterly</option>
-          <option value="6">Half-yearly</option>
-          <option value="12">Yearly</option>
-        </select>
-        <div className="grid grid-cols-[1fr_auto] gap-3">
-          <input className="input py-3" type="number" min="1" max="28" placeholder="Billing day" value={subscription.billingDay} onChange={(event) => setSubscription({ ...subscription, billingDay: event.target.value })} />
-          <button className="btn-soft px-4" type="button" onClick={onAdd} aria-label="Add subscription">
-            <Plus size={18} />
-          </button>
-        </div>
-      </div>
-      <div className="mt-4 flex flex-wrap gap-3">
-        <button className="btn-soft px-4" type="button" onClick={onSkip}>Skip for now</button>
-      </div>
-      {subscriptions.length > 0 && (
-        <div className="mt-5 space-y-2">
-          {subscriptions.map((item, index) => (
-            <div key={`${item.name}-${index}`} className="flex items-center justify-between rounded-lg bg-white/8 px-3 py-2 text-sm">
-              <span>{item.name} - Rs {item.amount} - every {item.billingCycle} month{item.billingCycle === 1 ? "" : "s"}</span>
-              <button type="button" className="text-rose-200" onClick={() => onRemove(index)} aria-label={`Remove ${item.name}`}>
-                <Trash2 size={16} />
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
 function FinishStep({ data }) {
   return (
     <div className="flex min-h-[25rem] flex-col justify-center">
@@ -353,12 +229,8 @@ function FinishStep({ data }) {
         helper="Review your setup. Finish will save this onboarding data locally and open your dashboard."
       />
       <div className="mt-8 grid gap-3 sm:grid-cols-2">
-        <SummaryItem label="Income" value={`Rs ${data.monthlyIncome || 0}`} />
         <SummaryItem label="Budget" value={`Rs ${data.monthlyBudget || 0}`} />
-        <SummaryItem label="Savings goal" value={data.goalName || "Not set"} />
-        <SummaryItem label="Target amount" value={`Rs ${data.goalTargetAmount || 0}`} />
         <SummaryItem label="Categories" value={`${data.categories.length} selected`} />
-        <SummaryItem label="Subscriptions" value={`${data.subscriptions.length} added`} />
       </div>
     </div>
   );
@@ -374,9 +246,7 @@ function SummaryItem({ label, value }) {
 }
 
 function isStepValid(step, data) {
-  if (step === 2) return Number(data.monthlyIncome) > 0;
-  if (step === 3) return Number(data.monthlyBudget) > 0;
-  if (step === 4) return data.goalName.trim().length > 0 && Number(data.goalTargetAmount) > 0;
-  if (step === 5) return data.categories.length > 0;
+  if (step === 2) return Number(data.monthlyBudget) > 0;
+  if (step === 3) return data.categories.length > 0;
   return true;
 }

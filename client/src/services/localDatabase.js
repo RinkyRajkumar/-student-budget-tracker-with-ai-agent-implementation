@@ -9,14 +9,19 @@ const LEGACY_KEYS_TO_CLEAR = [
 
 export const defaultCategories = [
   { id: 2, name: "Books", color: "#6366f1" },
+  { id: 11, name: "Bills & Utilities", color: "#10b981" },
+  { id: 13, name: "Education", color: "#ec4899" },
   { id: 5, name: "Entertainment", color: "#d946ef" },
   { id: 10, name: "Food", color: "#f97316" },
   { id: 6, name: "Health", color: "#ef4444" },
   { id: 9, name: "Other", color: "#475569" },
   { id: 3, name: "Rent", color: "#14b8a6" },
+  { id: 12, name: "Rent / Housing", color: "#f59e0b" },
+  { id: 14, name: "Savings", color: "#22c55e" },
   { id: 7, name: "Shopping", color: "#f59e0b" },
   { id: 8, name: "Subscriptions", color: "#8b5cf6" },
   { id: 1, name: "Transport", color: "#0ea5e9" },
+  { id: 15, name: "Travel", color: "#eab308" },
   { id: 4, name: "Tuition", color: "#64748b" }
 ];
 
@@ -39,6 +44,7 @@ function emptyDatabase() {
       currency: "INR"
     },
     expenses: [],
+    events: [],
     budget: { monthlyLimit: 0 },
     goal: { name: "", targetAmount: 0, currentAmount: 0, targetDate: "" },
     subscriptions: [],
@@ -67,6 +73,7 @@ export function readLocalDatabase() {
       ...emptyDatabase(),
       ...parsed,
       user: { ...emptyDatabase().user, ...(parsed.user || {}) },
+      events: Array.isArray(parsed.events) ? parsed.events : [],
       split: { ...emptyDatabase().split, ...(parsed.split || {}) }
     };
   } catch {

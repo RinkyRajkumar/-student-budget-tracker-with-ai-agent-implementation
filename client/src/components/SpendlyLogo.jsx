@@ -1,9 +1,9 @@
-export default function SpendlyLogo({ size = "md", stacked = false }) {
+export default function SpendlyLogo({ size = "md", stacked = false, animated = false }) {
   const dimensions = size === "lg" ? "h-20" : size === "sm" ? "h-10" : "h-14";
   const textSize = size === "lg" ? "text-5xl" : size === "sm" ? "text-2xl" : "text-3xl";
 
   return (
-    <div className={`flex items-center ${stacked ? "justify-start" : ""} gap-3`}>
+    <div className={`flex items-center ${stacked ? "justify-start" : ""} ${animated ? "spendly-logo-animated" : ""} gap-3`}>
       <svg className={`${dimensions} w-auto shrink-0 drop-shadow-[0_0_18px_rgba(139,92,246,0.34)]`} viewBox="0 0 122 92" fill="none" aria-hidden="true">
         <rect x="18" y="28" width="78" height="50" rx="12" fill="url(#walletBody)" stroke="#2a174f" strokeWidth="3" />
         <path d="M28 33l61-16c7-2 13 2 15 9l9 35H41L28 33z" fill="#a7d8b8" stroke="#2a174f" strokeWidth="3" />

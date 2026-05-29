@@ -21,7 +21,7 @@ const cents = (amount) => Math.round(Number(amount || 0) * 100);
 const money = (value) => Number((Number(value || 0) / 100).toFixed(2));
 const nextId = (rows) => Math.max(0, ...rows.map((row) => Number(row.id) || 0)) + 1;
 
-function expense(id, categoryId, amount, date, note, paymentMethod) {
+function expense(id, categoryId, amount, date, note, paymentMethod, event = {}) {
   const category = categories.find((item) => item.id === categoryId) || categories[0];
   return {
     id,
@@ -33,6 +33,8 @@ function expense(id, categoryId, amount, date, note, paymentMethod) {
     date,
     note,
     paymentMethod,
+    eventId: event.eventId || null,
+    eventName: event.eventName || null,
     createdAt: new Date().toISOString()
   };
 }
@@ -47,6 +49,24 @@ function write(next) {
 
 function response(data) {
   return Promise.resolve({ data });
+}
+
+function normalizeLocalEvent(payload, userId) {
+  const now = new Date().toISOString();
+  return {
+    id: payload.id || (typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : String(Date.now())),
+    userId,
+    name: payload.name,
+    type: payload.type || "Other",
+    startDate: payload.startDate,
+    endDate: payload.endDate,
+    budgetAmount: Number(payload.budgetAmount || 0),
+    notes: payload.notes || "",
+    category: payload.category || "Food",
+    completed: Boolean(payload.completed),
+    createdAt: payload.createdAt || now,
+    updatedAt: now
+  };
 }
 
 function filterExpenses(rows, params = {}) {
@@ -191,6 +211,7 @@ const browserApi = {
     if (path === "/budget") return response(state.budget);
     if (path === "/savings-goal") return response({ goal: { ...state.goal, progressPercent: Math.round((state.goal.currentAmount / state.goal.targetAmount) * 10000) / 100 } });
     if (path === "/subscriptions") return response({ subscriptions: state.subscriptions });
+    if (path === "/events") return response({ events: state.events || [] });
     if (path === "/split-bills") return response(splitOverview(state));
     if (path.startsWith("/export.csv")) {
       const rows = filterExpenses(state.expenses, params);
@@ -202,7 +223,7 @@ const browserApi = {
   post(path, payload) {
     const state = store();
     if (path === "/expenses") {
-      const row = expense(nextId(state.expenses), Number(payload.categoryId), Number(payload.amount), payload.date, payload.note || "", payload.paymentMethod);
+      const row = expense(nextId(state.expenses), Number(payload.categoryId), Number(payload.amount), payload.date, payload.note || "", payload.paymentMethod, payload);
       state.expenses.push(row);
       write(state);
       return response({ expense: row });
@@ -212,6 +233,12 @@ const browserApi = {
       state.subscriptions.push({ id: nextId(state.subscriptions), name: payload.name, categoryId: category.id, category: category.name, categoryColor: category.color, amount: Number(payload.amount), billingDay: Number(payload.billingDay), intervalMonths: Number(payload.intervalMonths), paymentMethod: payload.paymentMethod, active: true, lastChargedMonth: "" });
       write(state);
       return response({ subscription: state.subscriptions[state.subscriptions.length - 1] });
+    }
+    if (path === "/events") {
+      const row = normalizeLocalEvent(payload, state.user.id);
+      state.events = [row, ...(state.events || [])];
+      write(state);
+      return response({ event: row });
     }
     if (path === "/split-bills/groups") {
       const groupId = nextId(state.split.groups);
@@ -243,11 +270,22 @@ const browserApi = {
   put(path, payload) {
     const state = store();
     const expenseMatch = path.match(/^\/expenses\/(\d+)$/);
+    const eventMatch = path.match(/^\/events\/([^/]+)$/);
     if (expenseMatch) {
       const index = state.expenses.findIndex((item) => item.id === Number(expenseMatch[1]));
-      state.expenses[index] = expense(Number(expenseMatch[1]), Number(payload.categoryId), Number(payload.amount), payload.date, payload.note || "", payload.paymentMethod);
+      state.expenses[index] = expense(Number(expenseMatch[1]), Number(payload.categoryId), Number(payload.amount), payload.date, payload.note || "", payload.paymentMethod, {
+        eventId: payload.eventId ?? state.expenses[index]?.eventId,
+        eventName: payload.eventName ?? state.expenses[index]?.eventName
+      });
       write(state);
       return response({ expense: state.expenses[index] });
+    }
+    if (eventMatch) {
+      const index = (state.events || []).findIndex((item) => String(item.id) === String(eventMatch[1]));
+      if (index < 0) return Promise.reject(new Error("Event not found."));
+      state.events[index] = normalizeLocalEvent({ ...state.events[index], ...payload, id: state.events[index].id, createdAt: state.events[index].createdAt }, state.user.id);
+      write(state);
+      return response({ event: state.events[index] });
     }
     if (path === "/budget") {
       state.budget.monthlyLimit = Number(payload.monthlyLimit);
@@ -285,9 +323,11 @@ const browserApi = {
     const state = store();
     const expenseMatch = path.match(/^\/expenses\/(\d+)$/);
     const subscriptionMatch = path.match(/^\/subscriptions\/(\d+)$/);
+    const eventMatch = path.match(/^\/events\/([^/]+)$/);
     const memberMatch = path.match(/^\/split-bills\/groups\/(\d+)\/members\/(\d+)$/);
     if (expenseMatch) state.expenses = state.expenses.filter((item) => item.id !== Number(expenseMatch[1]));
     else if (subscriptionMatch) state.subscriptions = state.subscriptions.filter((item) => item.id !== Number(subscriptionMatch[1]));
+    else if (eventMatch) state.events = (state.events || []).filter((item) => String(item.id) !== String(eventMatch[1]));
     else if (memberMatch) {
       const group = state.split.groups.find((item) => item.id === Number(memberMatch[1]));
       group.members = group.members.filter((item) => item.id !== Number(memberMatch[2]));

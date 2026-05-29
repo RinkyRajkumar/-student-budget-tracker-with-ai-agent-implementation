@@ -42,6 +42,16 @@ A functional student budget tracking website built with React, Vite, Tailwind CS
    VITE_SUPABASE_ANON_KEY=your-supabase-anon-key
    ```
 
+   Supabase Auth setup:
+
+   - Enable the Email provider in Supabase Auth.
+   - Turn on email confirmation for signup verification.
+   - Enable the Google provider in Supabase Auth.
+   - Create a Google OAuth Client ID and Client Secret in Google Cloud.
+   - Add redirect URLs in Supabase and Google OAuth settings:
+     - `http://localhost:5173/auth/callback`
+     - `https://your-vercel-domain.vercel.app/auth/callback`
+
    Keep `VITE_DATA_BACKEND=local` for the current localStorage database, or use `VITE_USE_BROWSER_STORE=false` only if you intentionally want the Express API.
 
    Split Bills receipt OCR uses Gemini from the backend. Add your key in `server/.env`:

@@ -5,6 +5,8 @@ server/data/
 dist/
 client/dist/
 .env
+.env.local
+client/.env.local
 server/.env
 *.log
 .edge-profile*/

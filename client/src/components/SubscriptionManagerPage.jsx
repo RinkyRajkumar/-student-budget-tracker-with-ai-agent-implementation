@@ -1,6 +1,7 @@
-import { CalendarDays, Check, CreditCard, Edit3, MoreVertical, Plus, Search, Sparkles, Trash2, WalletCards, X } from "lucide-react";
+import { CalendarDays, Check, ChevronDown, CreditCard, Edit3, MoreVertical, Plus, Search, Sparkles, Trash2, WalletCards, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { formatCurrency } from "../services/currency.js";
+import { confirmSpendly } from "../services/confirmDialog.js";
 
 const categoryOptions = ["Entertainment", "Study", "Utility", "Bills", "Other"];
 const intervalOptions = [
@@ -131,16 +132,18 @@ export default function SubscriptionManagerPage({ categories, subscriptions, onC
   }
 
   async function confirmDelete(item) {
-    if (window.confirm(`Delete ${item.name}?`)) await onDelete(item.id);
+    const confirmed = await confirmSpendly({
+      title: `Delete ${item.name}?`,
+      message: "This recurring payment will be removed from your tracker.",
+      confirmLabel: "Delete",
+      tone: "danger"
+    });
+    if (confirmed) await onDelete(item.id);
   }
 
   return (
     <section className="space-y-4">
-      <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-        <div>
-          <h2 className="text-3xl font-black tracking-normal text-white">Recurring</h2>
-          <p className="mt-2 text-sm text-slate-400">Track recurring bills, memberships, and automatic payments.</p>
-        </div>
+      <div className="flex justify-end">
         <button className="btn-primary px-4 py-3" onClick={openCreate}>
           <Plus size={18} />
           Add Subscription
@@ -198,12 +201,12 @@ export default function SubscriptionManagerPage({ categories, subscriptions, onC
 
 function StatTile({ label, value, icon: Icon }) {
   return (
-    <div className="card p-4">
+    <div className="card p-3">
       <div className="flex items-center justify-between gap-3">
         <p className="text-sm font-semibold text-slate-400">{label}</p>
-        <span className="grid h-10 w-10 place-items-center rounded-2xl bg-violet-500/15 text-violet-200"><Icon size={18} /></span>
+        <span className="grid h-8 w-8 place-items-center rounded-xl bg-violet-500/15 text-violet-200"><Icon size={16} /></span>
       </div>
-      <p className="mt-3 truncate text-2xl font-black tracking-normal text-white">{value}</p>
+      <p className="mt-2 truncate text-xl font-black tracking-normal text-white">{value}</p>
     </div>
   );
 }
@@ -212,12 +215,13 @@ function SubscriptionTable({ subscriptions, onEdit, onDelete }) {
   return (
     <div className="card overflow-hidden">
       <div className="hidden overflow-x-auto lg:block">
-        <table className="w-full min-w-[56rem] text-left text-sm">
+        <table className="w-full min-w-[64rem] text-left text-sm">
           <thead className="bg-white/5 text-xs uppercase text-slate-500">
             <tr>
-              <th className="px-5 py-4">Name / Frequency</th>
+              <th className="px-5 py-4">Name</th>
               <th className="px-5 py-4">Category</th>
               <th className="px-5 py-4">Payment method</th>
+              <th className="px-5 py-4">Payment cycle</th>
               <th className="px-5 py-4">Due</th>
               <th className="px-5 py-4">Amount</th>
               <th className="px-5 py-4">Actions</th>
@@ -231,12 +235,12 @@ function SubscriptionTable({ subscriptions, onEdit, onDelete }) {
                     <span className="grid h-11 w-11 place-items-center rounded-2xl text-sm font-black text-white" style={{ backgroundColor: categoryColor(index) }}>{item.name[0]?.toUpperCase()}</span>
                     <div>
                       <p className="font-bold text-slate-100">{item.name}</p>
-                      <p className="text-xs text-slate-500">{frequencyLabel(item.intervalMonths)}</p>
                     </div>
                   </div>
                 </td>
                 <td className="px-5 py-4 text-slate-300">{classifyCategory(item)}</td>
                 <td className="px-5 py-4 capitalize text-slate-300">{item.paymentMethod}</td>
+                <td className="px-5 py-4 text-slate-300">{frequencyLabel(item.intervalMonths)}</td>
                 <td className="px-5 py-4"><DueBadge item={item} /></td>
                 <td className="px-5 py-4 font-black tabular-nums text-slate-100">{formatCurrency(item.amount)}</td>
                 <td className="px-5 py-4">
@@ -258,13 +262,16 @@ function SubscriptionTable({ subscriptions, onEdit, onDelete }) {
                 <span className="grid h-11 w-11 place-items-center rounded-2xl text-sm font-black text-white" style={{ backgroundColor: categoryColor(index) }}>{item.name[0]?.toUpperCase()}</span>
                 <div>
                   <p className="font-bold text-slate-100">{item.name}</p>
-                  <p className="text-xs text-slate-500">{frequencyLabel(item.intervalMonths)} / {classifyCategory(item)}</p>
+                  <p className="text-xs text-slate-500">{classifyCategory(item)} / {item.paymentMethod}</p>
                 </div>
               </div>
               <p className="font-black">{formatCurrency(item.amount)}</p>
             </div>
-            <div className="mt-3 flex items-center justify-between">
-              <DueBadge item={item} />
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="rounded-full bg-violet-500/15 px-2 py-1 text-xs font-bold text-violet-100">{frequencyLabel(item.intervalMonths)}</span>
+                <DueBadge item={item} />
+              </div>
               <div className="flex gap-2">
                 <button className="btn-soft px-3" onClick={() => onEdit(item)}><Edit3 size={15} /></button>
                 <button className="btn-danger px-3" onClick={() => onDelete(item)} disabled={item.readOnly}><Trash2 size={15} /></button>
@@ -372,9 +379,11 @@ function SubscriptionCalendar({ subscriptions, selectedDate, setSelectedDate }) 
 
 function SubscriptionModal({ form, setForm, onClose, onSave }) {
   const [planSearch, setPlanSearch] = useState("");
+  const [customOpen, setCustomOpen] = useState(Boolean(form.id));
   const filteredPlans = popularSubscriptionPlans.filter((plan) =>
     `${plan.name} ${plan.categoryName} ${frequencyLabel(plan.intervalMonths)}`.toLowerCase().includes(planSearch.toLowerCase())
   );
+  const canSave = Boolean(String(form.name || "").trim()) && Number(form.amount || 0) > 0 && Boolean(form.nextDueDate);
 
   function applyPopularPlan(plan) {
     setForm({
@@ -389,7 +398,8 @@ function SubscriptionModal({ form, setForm, onClose, onSave }) {
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/60 px-4 backdrop-blur-sm">
-      <form className="card max-h-[92vh] w-full max-w-5xl overflow-y-auto p-5 md:p-6" onSubmit={onSave}>
+      <form className="card max-h-[92vh] w-full max-w-5xl overflow-y-auto p-0" onSubmit={onSave}>
+        <div className="p-5 pb-0 md:p-6 md:pb-0">
         <div className="flex items-start justify-between gap-3">
           <div>
             <h3 className="text-2xl font-black">{form.id ? "Edit subscription" : "Add subscription"}</h3>
@@ -408,15 +418,17 @@ function SubscriptionModal({ form, setForm, onClose, onSave }) {
                 </div>
                 <p className="mt-1 text-xs leading-5 text-slate-400">Choose from 50 famous subscriptions. Prices are editable INR estimates.</p>
               </div>
-              <label className="relative w-full md:w-72">
-                <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={16} />
-                <input
-                  className="input pl-10"
-                  placeholder="Search plans..."
-                  value={planSearch}
-                  onChange={(event) => setPlanSearch(event.target.value)}
-                />
-              </label>
+              <div className="flex w-full flex-col gap-2 sm:flex-row md:w-auto">
+                <label className="relative w-full md:w-80">
+                  <Search className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={16} />
+                  <input
+                    className="input pl-12"
+                    placeholder=""
+                    value={planSearch}
+                    onChange={(event) => setPlanSearch(event.target.value)}
+                  />
+                </label>
+              </div>
             </div>
             <div className="mt-4 grid max-h-64 gap-2 overflow-y-auto pr-1 sm:grid-cols-2 lg:grid-cols-3">
               {filteredPlans.map((plan) => {
@@ -447,19 +459,46 @@ function SubscriptionModal({ form, setForm, onClose, onSave }) {
           </section>
         )}
 
-        <div className="mt-5 grid gap-4 sm:grid-cols-2">
-          <label className="block text-sm font-semibold text-slate-300">Subscription name<input className="input mt-2" required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></label>
-          <label className="block text-sm font-semibold text-slate-300">Amount<input className="input mt-2" type="number" min="1" required value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} /></label>
-          <label className="block text-sm font-semibold text-slate-300">Billing cycle<select className="input mt-2" value={form.intervalMonths} onChange={(e) => setForm({ ...form, intervalMonths: Number(e.target.value) })}>{intervalOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label>
-          <label className="block text-sm font-semibold text-slate-300">Category<select className="input mt-2" value={form.categoryName} onChange={(e) => setForm({ ...form, categoryName: e.target.value })}>{categoryOptions.map((item) => <option key={item}>{item}</option>)}</select></label>
-          <label className="block text-sm font-semibold text-slate-300">Payment method<select className="input mt-2" value={form.paymentMethod} onChange={(e) => setForm({ ...form, paymentMethod: e.target.value })}>{paymentMethods.map((item) => <option key={item} value={item}>{item.toUpperCase()}</option>)}</select></label>
-          <label className="block text-sm font-semibold text-slate-300">Next due date<input className="input mt-2" type="date" required value={form.nextDueDate} onChange={(e) => setForm({ ...form, nextDueDate: e.target.value })} /></label>
-          <label className="block text-sm font-semibold text-slate-300 sm:col-span-2">Notes<textarea className="input mt-2 min-h-24" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} /></label>
-          <label className="flex items-center gap-3 rounded-3xl bg-white/8 px-4 py-3 text-sm font-semibold text-slate-300 sm:col-span-2"><input type="checkbox" checked={form.reminder} onChange={(e) => setForm({ ...form, reminder: e.target.checked })} /> Reminder enabled</label>
+        <section className="mt-5 overflow-hidden rounded-3xl border border-white/10 bg-white/[0.04]">
+          <button
+            className="flex w-full items-center justify-between gap-3 px-4 py-4 text-left transition hover:bg-violet-500/10"
+            type="button"
+            onClick={() => setCustomOpen((open) => !open)}
+            aria-expanded={customOpen}
+          >
+            <span>
+              <span className="block text-sm font-black text-white">Add Custom Subscription</span>
+              <span className="mt-1 block text-xs text-slate-400">Create your own recurring payment or edit the selected plan details.</span>
+            </span>
+            <ChevronDown className={`shrink-0 text-violet-200 transition-transform duration-300 ${customOpen ? "rotate-180" : ""}`} size={20} />
+          </button>
+          <div className={`grid transition-all duration-300 ease-out ${customOpen ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"}`}>
+            <div className="overflow-hidden">
+              <div className="grid gap-4 border-t border-white/10 p-4 sm:grid-cols-2">
+                <label className="block text-sm font-semibold text-slate-300">Subscription name<input className="input mt-2" required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></label>
+                <label className="block text-sm font-semibold text-slate-300">Amount<input className="input mt-2" type="number" min="1" required value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} /></label>
+                <label className="block text-sm font-semibold text-slate-300">Billing cycle<select className="input mt-2" value={form.intervalMonths} onChange={(e) => setForm({ ...form, intervalMonths: Number(e.target.value) })}>{intervalOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label>
+                <label className="block text-sm font-semibold text-slate-300">Category<select className="input mt-2" value={form.categoryName} onChange={(e) => setForm({ ...form, categoryName: e.target.value })}>{categoryOptions.map((item) => <option key={item}>{item}</option>)}</select></label>
+                <label className="block text-sm font-semibold text-slate-300">Payment method<select className="input mt-2" value={form.paymentMethod} onChange={(e) => setForm({ ...form, paymentMethod: e.target.value })}>{paymentMethods.map((item) => <option key={item} value={item}>{item.toUpperCase()}</option>)}</select></label>
+                <label className="block text-sm font-semibold text-slate-300">Next due date<input className="input mt-2" type="date" required value={form.nextDueDate} onChange={(e) => setForm({ ...form, nextDueDate: e.target.value })} /></label>
+                <label className="block text-sm font-semibold text-slate-300 sm:col-span-2">Notes<textarea className="input mt-2 min-h-24" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} /></label>
+                <label className="flex items-center gap-3 rounded-3xl bg-white/8 px-4 py-3 text-sm font-semibold text-slate-300 sm:col-span-2"><input type="checkbox" checked={form.reminder} onChange={(e) => setForm({ ...form, reminder: e.target.checked })} /> Reminder enabled</label>
+              </div>
+            </div>
+          </div>
+        </section>
         </div>
-        <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+        <div className="sticky bottom-0 mt-6 flex flex-col-reverse gap-3 border-t border-white/10 bg-slate-950/95 p-5 backdrop-blur-xl sm:flex-row sm:items-center sm:justify-between md:px-6">
+          <p className="text-xs text-slate-400">
+            {canSave ? "Ready to add this recurring payment to your dashboard." : "Choose a plan or enter a name, amount, and due date."}
+          </p>
+          <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
           <button className="btn-soft" type="button" onClick={onClose}>Cancel</button>
-          <button className="btn-primary">Save subscription</button>
+          <button className="btn-primary" type="submit" disabled={!canSave}>
+            <Plus size={17} />
+            {form.id ? "Save subscription" : "Add subscription"}
+          </button>
+          </div>
         </div>
       </form>
     </div>

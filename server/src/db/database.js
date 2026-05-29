@@ -109,6 +109,9 @@ function migrateDatabase(db) {
 const categories = [
   ["Food", "#f97316"],
   ["Transport", "#0ea5e9"],
+  ["Bills & Utilities", "#10b981"],
+  ["Rent / Housing", "#f59e0b"],
+  ["Education", "#ec4899"],
   ["Books", "#6366f1"],
   ["Rent", "#14b8a6"],
   ["Tuition", "#64748b"],
@@ -116,6 +119,8 @@ const categories = [
   ["Health", "#ef4444"],
   ["Shopping", "#f59e0b"],
   ["Subscriptions", "#8b5cf6"],
+  ["Savings", "#22c55e"],
+  ["Travel", "#eab308"],
   ["Other", "#475569"]
 ];
 
