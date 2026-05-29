@@ -60,8 +60,8 @@ export async function signupUser({ name, email, password }) {
     });
     if (error) throw new Error(error.message);
     const user = data.user;
-    if (!user) throw new Error("Supabase did not return a user for this signup.");
     if (data.session) {
+      if (!user) throw new Error("Supabase did not return a user for this signup.");
       const sessionUser = { id: user.id, name: name.trim(), email: normalizedEmail };
       writeJson(SESSION_KEY, sessionUser);
       await upsertSupabaseProfile(sessionUser, false);
