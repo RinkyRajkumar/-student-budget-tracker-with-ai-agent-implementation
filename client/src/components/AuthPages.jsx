@@ -1,4 +1,4 @@
-import { ArrowLeft, ArrowRight } from "lucide-react";
+import { ArrowLeft, ArrowRight, CheckCircle2, ExternalLink, MailCheck } from "lucide-react";
 import { useState } from "react";
 import { googleOAuthUrl, loginUser, resetPassword, signupUser } from "../services/localAuth.js";
 import SpendlyLoader from "./SpendlyLoader.jsx";
@@ -77,6 +77,7 @@ export function SignupPage({ onNavigate, onSignup }) {
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [verificationEmail, setVerificationEmail] = useState("");
   const strength = getPasswordStrength(form.password);
 
   async function submit(event) {
@@ -90,6 +91,7 @@ export function SignupPage({ onNavigate, onSignup }) {
       const result = await signupUser(form);
       if (result.verificationSent) {
         setIsLoading(false);
+        setVerificationEmail(form.email.trim().toLowerCase());
         setMessage(result.message || "Verification email sent. Please check your Gmail inbox.");
         return;
       }
@@ -109,6 +111,12 @@ export function SignupPage({ onNavigate, onSignup }) {
   return (
     <AuthShell title="Create your account" subtitle="Set up your profile before choosing your budget preferences." onNavigate={onNavigate}>
       <SpendlyLoader show={isLoading} message="Creating your Spendly space..." />
+      <EmailVerificationModal
+        email={verificationEmail}
+        show={Boolean(verificationEmail)}
+        onLogin={() => onNavigate("/login")}
+        onClose={() => setVerificationEmail("")}
+      />
       <a className={`btn-soft mb-5 w-full justify-center py-3 ${isLoading ? "pointer-events-none opacity-70" : ""}`} href={googleOAuthUrl()} onClick={signupWithGoogle}>
         <span className="grid h-6 w-6 place-items-center rounded-full bg-white text-sm font-black text-slate-950">G</span>
         Continue with Google
@@ -156,6 +164,53 @@ function PasswordStrengthMeter({ strength }) {
         ))}
       </div>
       <p className="mt-2 text-xs leading-5 text-slate-500">{strength.helper}</p>
+    </div>
+  );
+}
+
+function EmailVerificationModal({ email, show, onLogin, onClose }) {
+  if (!show) return null;
+
+  return (
+    <div className="fixed inset-0 z-[10000] grid place-items-center bg-black/75 px-4 backdrop-blur-xl" role="dialog" aria-modal="true" aria-labelledby="verify-email-title">
+      <section className="w-full max-w-lg overflow-hidden rounded-[30px] border border-violet-300/20 bg-[radial-gradient(circle_at_top,rgba(139,92,246,0.28),transparent_20rem),rgba(8,10,26,0.98)] p-6 text-slate-100 shadow-[0_32px_100px_rgba(0,0,0,0.55)]">
+        <div className="mx-auto grid h-16 w-16 place-items-center rounded-[22px] border border-emerald-300/20 bg-emerald-400/12 text-emerald-200 shadow-[0_0_34px_rgba(16,185,129,0.22)]">
+          <MailCheck size={30} />
+        </div>
+        <div className="mt-5 text-center">
+          <p className="text-xs font-black uppercase tracking-[0.22em] text-violet-200">Verify your account</p>
+          <h2 id="verify-email-title" className="mt-2 text-2xl font-black tracking-normal text-white">Check your Gmail inbox</h2>
+          <p className="mt-3 text-sm leading-6 text-slate-400">
+            We sent a verification link to <span className="font-semibold text-slate-100">{email}</span>. Open Gmail, verify your email address, then come back and login to Spendly.
+          </p>
+        </div>
+
+        <div className="mt-5 rounded-3xl border border-white/10 bg-white/[0.04] p-4">
+          <div className="flex items-start gap-3">
+            <div className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-2xl bg-violet-500/18 text-violet-200">
+              <CheckCircle2 size={18} />
+            </div>
+            <div>
+              <h3 className="text-sm font-black text-white">Next step</h3>
+              <p className="mt-1 text-sm leading-6 text-slate-400">After verification, use the login page with the same email and password to continue setup.</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-6 grid gap-3 sm:grid-cols-2">
+          <a className="btn-primary justify-center py-3" href="https://mail.google.com/" target="_blank" rel="noreferrer">
+            Open Gmail
+            <ExternalLink size={16} />
+          </a>
+          <button className="btn-soft justify-center py-3" type="button" onClick={onLogin}>
+            Continue to login
+            <ArrowRight size={16} />
+          </button>
+        </div>
+        <button className="mt-4 w-full text-sm font-semibold text-slate-500 transition hover:text-slate-300" type="button" onClick={onClose}>
+          Stay on signup page
+        </button>
+      </section>
     </div>
   );
 }
