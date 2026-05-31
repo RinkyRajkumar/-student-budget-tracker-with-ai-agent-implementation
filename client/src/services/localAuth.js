@@ -148,7 +148,7 @@ export async function signInWithGoogle() {
   const { error } = await getSupabase().auth.signInWithOAuth({
     provider: "google",
     options: {
-      redirectTo: `${window.location.origin}/auth/callback`,
+      redirectTo: getSupabaseAuthRedirectUrl(),
       queryParams: {
         access_type: "offline",
         prompt: "consent"
@@ -181,6 +181,31 @@ export async function getCurrentSupabaseUser() {
   await loadSupabaseOnboarding(data.user.id);
   writeOnboardingStatus(Boolean(profile?.onboarding_complete));
   return { user: sessionUser, onboardingComplete: Boolean(profile?.onboarding_complete) };
+}
+
+export async function completeSupabaseOAuthCallback() {
+  if (!isSupabaseEnabled()) return null;
+  const params = new URLSearchParams(window.location.search);
+  const oauthError = params.get("error_description") || params.get("error");
+  if (oauthError) throw new Error(oauthError);
+
+  const code = params.get("code");
+  if (code) {
+    const { error } = await getSupabase().auth.exchangeCodeForSession(code);
+    if (error) throw new Error(error.message);
+    window.history.replaceState({}, "", "/auth/callback");
+  }
+
+  return getCurrentSupabaseUser();
+}
+
+export function hasSupabaseOAuthCallbackParams() {
+  const params = new URLSearchParams(window.location.search);
+  return params.has("code") || params.has("error") || params.has("error_description");
+}
+
+function getSupabaseAuthRedirectUrl() {
+  return import.meta.env.VITE_SUPABASE_AUTH_REDIRECT_URL || `${window.location.origin}/auth/callback`;
 }
 
 export async function saveOnboarding(data) {

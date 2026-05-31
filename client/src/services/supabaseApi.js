@@ -1,7 +1,8 @@
-import { defaultCategories } from "./localDatabase.js";
+import { defaultCategories, readLocalDatabase } from "./localDatabase.js";
 import { getSupabase } from "./supabaseClient.js";
 
 const SESSION_KEY = "student-budget-app-session";
+const SUPABASE_MIGRATION_KEY_PREFIX = "spendly_supabase_imported_local_data_";
 
 const today = () => new Date().toISOString().slice(0, 10);
 const month = () => today().slice(0, 7);
@@ -29,6 +30,7 @@ async function requireSupabaseUser() {
     email: data.user.email
   };
   localStorage.setItem(SESSION_KEY, JSON.stringify(user));
+  await importLocalFinanceData(supabase, user.id);
   return { supabase, user };
 }
 
@@ -85,6 +87,186 @@ function normalizeSubscription(row) {
 
 function categoryById(categories, categoryId) {
   return categories.find((item) => Number(item.id) === Number(categoryId)) || defaultCategories.find((item) => item.name === "Other") || defaultCategories[0];
+}
+
+function localDatabaseSnapshot() {
+  try {
+    return readLocalDatabase();
+  } catch {
+    return { expenses: [], subscriptions: [], events: [], budget: { monthlyLimit: 0 } };
+  }
+}
+
+function sameExpenseKey(item) {
+  return [
+    item.date || item.spent_on || "",
+    Number(item.amount || 0).toFixed(2),
+    String(item.category || item.category_name || "").trim().toLowerCase(),
+    String(item.note || "").trim().toLowerCase(),
+    String(item.paymentMethod || item.payment_method || "").trim().toLowerCase()
+  ].join("|");
+}
+
+function mergeLocalExpenses(userId, supabaseRows) {
+  const state = localDatabaseSnapshot();
+  const existing = new Set(supabaseRows.map(sameExpenseKey));
+  const localRows = (state.expenses || [])
+    .filter((item) => !item.userId || String(item.userId) === String(userId) || String(state.user?.id) === String(userId) || state.user?.email)
+    .filter((item) => !existing.has(sameExpenseKey(item)))
+    .map((item) => ({
+      ...item,
+      id: `local-${item.id}`,
+      categoryId: item.categoryId,
+      category: item.category,
+      categoryColor: item.categoryColor,
+      amount: Number(item.amount || 0),
+      amountCents: Math.round(Number(item.amount || 0) * 100),
+      date: item.date,
+      note: item.note || "",
+      paymentMethod: item.paymentMethod || "other",
+      eventId: item.eventId || null,
+      eventName: item.eventName || null,
+      createdAt: item.createdAt || new Date().toISOString(),
+      localOnly: true
+    }));
+  return [...supabaseRows, ...localRows].sort((a, b) => b.date.localeCompare(a.date) || String(b.id).localeCompare(String(a.id)));
+}
+
+function mergeLocalSubscriptions(userId, supabaseRows) {
+  const state = localDatabaseSnapshot();
+  const existing = new Set(supabaseRows.map((item) => `${item.name}`.trim().toLowerCase()));
+  const localRows = (state.subscriptions || [])
+    .filter((item) => !item.userId || String(item.userId) === String(userId) || String(state.user?.id) === String(userId) || state.user?.email)
+    .filter((item) => !existing.has(`${item.name}`.trim().toLowerCase()))
+    .map((item) => ({ ...item, id: `local-${item.id}`, localOnly: true }));
+  return [...supabaseRows, ...localRows];
+}
+
+function mergeLocalEvents(userId, supabaseRows) {
+  const state = localDatabaseSnapshot();
+  const existing = new Set(supabaseRows.map((item) => `${item.name}|${item.startDate}|${item.endDate}`.toLowerCase()));
+  const localRows = (state.events || [])
+    .filter((item) => !item.userId || String(item.userId) === String(userId) || String(state.user?.id) === String(userId) || state.user?.email)
+    .filter((item) => !existing.has(`${item.name}|${item.startDate}|${item.endDate}`.toLowerCase()))
+    .map((item) => ({ ...item, id: `local-${item.id}`, localOnly: true }));
+  return [...supabaseRows, ...localRows];
+}
+
+async function importLocalFinanceData(supabase, userId) {
+  const migrationKey = `${SUPABASE_MIGRATION_KEY_PREFIX}${userId}`;
+  if (localStorage.getItem(migrationKey)) return;
+  const state = localDatabaseSnapshot();
+  const hasLocalData = Boolean(
+    state.expenses?.length ||
+    state.subscriptions?.length ||
+    state.events?.length ||
+    Number(state.budget?.monthlyLimit || 0) > 0
+  );
+  if (!hasLocalData) {
+    localStorage.setItem(migrationKey, "empty");
+    return;
+  }
+
+  try {
+    const categories = await loadCategories(supabase, userId);
+    const { data: existingExpenseRows, error: expenseLookupError } = await supabase
+      .from("spendly_expenses")
+      .select("*")
+      .eq("user_id", userId);
+    if (expenseLookupError) throw expenseLookupError;
+    const existingExpenseKeys = new Set((existingExpenseRows || []).map((row) => sameExpenseKey(normalizeExpense(row))));
+    const localExpenses = (state.expenses || [])
+      .filter((item) => !existingExpenseKeys.has(sameExpenseKey(item)))
+      .map((item) => {
+        const category = categoryById(categories, item.categoryId) || categories.find((row) => row.name === item.category) || defaultCategories[0];
+        return {
+          user_id: userId,
+          category_id: category.id,
+          category_name: item.category || category.name,
+          category_color: item.categoryColor || category.color,
+          amount: Number(item.amount || 0),
+          spent_on: item.date,
+          note: item.note || "",
+          payment_method: item.paymentMethod || "other",
+          event_id: null,
+          event_name: item.eventName || null
+        };
+      });
+    if (localExpenses.length) {
+      const { error } = await supabase.from("spendly_expenses").insert(localExpenses);
+      if (error) throw error;
+    }
+
+    const { data: budgetRow, error: budgetLookupError } = await supabase
+      .from("spendly_budget_settings")
+      .select("monthly_limit")
+      .eq("user_id", userId)
+      .maybeSingle();
+    if (budgetLookupError) throw budgetLookupError;
+    if (!Number(budgetRow?.monthly_limit || 0) && Number(state.budget?.monthlyLimit || 0) > 0) {
+      const { error } = await supabase
+        .from("spendly_budget_settings")
+        .upsert({ user_id: userId, monthly_limit: Number(state.budget.monthlyLimit || 0), updated_at: new Date().toISOString() }, { onConflict: "user_id" });
+      if (error) throw error;
+    }
+
+    const { data: existingSubscriptions, error: subscriptionLookupError } = await supabase
+      .from("spendly_subscriptions")
+      .select("name")
+      .eq("user_id", userId);
+    if (subscriptionLookupError) throw subscriptionLookupError;
+    const existingSubscriptionNames = new Set((existingSubscriptions || []).map((item) => item.name.trim().toLowerCase()));
+    const localSubscriptions = (state.subscriptions || [])
+      .filter((item) => !existingSubscriptionNames.has(`${item.name}`.trim().toLowerCase()))
+      .map((item) => {
+        const category = categoryById(categories, item.categoryId) || categories.find((row) => row.name === item.category) || defaultCategories.find((row) => row.name === "Subscriptions") || defaultCategories[0];
+        return {
+          user_id: userId,
+          name: item.name,
+          amount: Number(item.amount || 0),
+          category_id: category.id,
+          category_name: item.category || category.name,
+          category_color: item.categoryColor || category.color,
+          billing_day: Number(item.billingDay || 1),
+          interval_months: Number(item.intervalMonths || 1),
+          payment_method: item.paymentMethod || "other",
+          active: Boolean(item.active ?? true),
+          notes: item.notes || ""
+        };
+      });
+    if (localSubscriptions.length) {
+      const { error } = await supabase.from("spendly_subscriptions").insert(localSubscriptions);
+      if (error) throw error;
+    }
+
+    const { data: existingEvents, error: eventLookupError } = await supabase
+      .from("spendly_events")
+      .select("name,start_date,end_date")
+      .eq("user_id", userId);
+    if (eventLookupError) throw eventLookupError;
+    const existingEventKeys = new Set((existingEvents || []).map((item) => `${item.name}|${item.start_date}|${item.end_date}`.toLowerCase()));
+    const localEvents = (state.events || [])
+      .filter((item) => !existingEventKeys.has(`${item.name}|${item.startDate}|${item.endDate}`.toLowerCase()))
+      .map((item) => ({
+        user_id: userId,
+        name: item.name,
+        type: item.type || "Other",
+        start_date: item.startDate,
+        end_date: item.endDate,
+        budget_amount: Number(item.budgetAmount || 0),
+        notes: item.notes || "",
+        category: item.category || "Food",
+        completed: Boolean(item.completed)
+      }));
+    if (localEvents.length) {
+      const { error } = await supabase.from("spendly_events").insert(localEvents);
+      if (error) throw error;
+    }
+
+    localStorage.setItem(migrationKey, "true");
+  } catch (error) {
+    console.warn("Spendly local-to-Supabase import skipped:", error);
+  }
 }
 
 async function loadCategories(supabase, userId) {
@@ -190,7 +372,7 @@ async function loadExpenses(supabase, userId) {
     .order("spent_on", { ascending: false })
     .order("id", { ascending: false });
   if (error) throw error;
-  return (data || []).map(normalizeExpense);
+  return mergeLocalExpenses(userId, (data || []).map(normalizeExpense));
 }
 
 async function loadBudget(supabase, userId) {
@@ -200,7 +382,8 @@ async function loadBudget(supabase, userId) {
     .eq("user_id", userId)
     .maybeSingle();
   if (error) throw error;
-  return { monthlyLimit: Number(data?.monthly_limit || 0) };
+  const localBudget = Number(localDatabaseSnapshot().budget?.monthlyLimit || 0);
+  return { monthlyLimit: Number(data?.monthly_limit || localBudget || 0) };
 }
 
 async function loadGoal(supabase, userId) {
@@ -229,7 +412,7 @@ async function loadSubscriptions(supabase, userId) {
     .eq("user_id", userId)
     .order("billing_day", { ascending: true });
   if (error) throw error;
-  return (data || []).map(normalizeSubscription);
+  return mergeLocalSubscriptions(userId, (data || []).map(normalizeSubscription));
 }
 
 async function loadEvents(supabase, userId) {
@@ -239,7 +422,7 @@ async function loadEvents(supabase, userId) {
     .eq("user_id", userId)
     .order("start_date", { ascending: false });
   if (error) throw error;
-  return (data || []).map(normalizeEvent);
+  return mergeLocalEvents(userId, (data || []).map(normalizeEvent));
 }
 
 export const supabaseApi = {

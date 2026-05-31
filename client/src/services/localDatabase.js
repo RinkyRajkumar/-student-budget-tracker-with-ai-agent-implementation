@@ -56,10 +56,43 @@ function emptyDatabase() {
   };
 }
 
+function readLegacyDatabase() {
+  try {
+    const raw = localStorage.getItem("student-budget-browser-store");
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") return null;
+    return {
+      ...emptyDatabase(),
+      ...parsed,
+      expenses: Array.isArray(parsed.expenses) ? parsed.expenses : [],
+      events: Array.isArray(parsed.events) ? parsed.events : [],
+      subscriptions: Array.isArray(parsed.subscriptions) ? parsed.subscriptions : [],
+      split: { ...emptyDatabase().split, ...(parsed.split || {}) }
+    };
+  } catch {
+    return null;
+  }
+}
+
 export function clearLegacyFinanceData() {
   if (localStorage.getItem(RESET_KEY)) return;
-  LEGACY_KEYS_TO_CLEAR.forEach((key) => localStorage.removeItem(key));
-  localStorage.setItem(DB_KEY, JSON.stringify(emptyDatabase()));
+  const legacy = readLegacyDatabase();
+  const current = (() => {
+    try {
+      return JSON.parse(localStorage.getItem(DB_KEY) || "null");
+    } catch {
+      return null;
+    }
+  })();
+  const hasCurrentFinanceData = Boolean(
+    current?.expenses?.length ||
+    current?.events?.length ||
+    current?.subscriptions?.length ||
+    Number(current?.budget?.monthlyLimit || 0) > 0
+  );
+  localStorage.setItem(DB_KEY, JSON.stringify(!hasCurrentFinanceData && legacy ? legacy : current || emptyDatabase()));
+  LEGACY_KEYS_TO_CLEAR.filter((key) => key !== "student-budget-browser-store").forEach((key) => localStorage.removeItem(key));
   localStorage.setItem(RESET_KEY, "true");
 }
 

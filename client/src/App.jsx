@@ -25,7 +25,7 @@ import { formatCurrency } from "./services/currency.js";
 import { addMonths, buildCalendarDays, formatMonthLabel, localDateString, localMonthString, monthBounds } from "./services/dates.js";
 import { mergeSpendlyCategories } from "./services/categories.js";
 import { enrichExpensesWithEvents, eventStats, removeEventLinks } from "./services/events.js";
-import { getCurrentSupabaseUser, getOnboarding, getSessionUser, isOnboardingComplete, logoutUser, redoOnboarding } from "./services/localAuth.js";
+import { completeSupabaseOAuthCallback, getCurrentSupabaseUser, getOnboarding, getSessionUser, hasSupabaseOAuthCallbackParams, isOnboardingComplete, logoutUser, redoOnboarding } from "./services/localAuth.js";
 import { isSupabaseEnabled } from "./services/supabaseClient.js";
 
 const emptySummary = {
@@ -142,7 +142,9 @@ export default function App() {
         return;
       }
       try {
-        const result = await getCurrentSupabaseUser();
+        const result = hasSupabaseOAuthCallbackParams()
+          ? await completeSupabaseOAuthCallback()
+          : await getCurrentSupabaseUser();
         if (!active) return;
         if (result?.user) {
           setAppUser(result.user);
@@ -265,7 +267,7 @@ function AuthCallbackPage({ onComplete, onNavigate }) {
     let active = true;
     async function finishCallback() {
       try {
-        const result = await getCurrentSupabaseUser();
+        const result = await completeSupabaseOAuthCallback();
         if (!active) return;
         if (!result?.user) {
           onNavigate("/login");
